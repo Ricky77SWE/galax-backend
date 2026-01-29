@@ -1,49 +1,57 @@
-import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import random
 import requests
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+import base64
 
 app = FastAPI()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FALLBACK_DIR = os.path.join(BASE_DIR, "fallback")
-COMFYUI_URL = os.getenv("COMFYUI_URL")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
-def get_fallback_image():
-    files = [f for f in os.listdir(FALLBACK_DIR) if f.endswith(".png")]
-    if not files:
-        raise RuntimeError("No fallback images found")
-    return os.path.join(FALLBACK_DIR, random.choice(files))
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
+# 🔁 WordPress fallback-bilder
+FALLBACK_IMAGES = [ 
+    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/01/hero_{i:02d}.png"
+    for i in range(1, 15)
+]
 
 @app.post("/generate")
-def generate():
+async def generate(payload: dict):
+    """
+    CPU-backend:
+    - Tar emot data från appen
+    - Returnerar ALLTID en bild (fallback nu, GPU senare)
+    """
     try:
-        if not COMFYUI_URL:
-            raise RuntimeError("COMFYUI_URL not set")
-
-        r = requests.post(
-            COMFYUI_URL,
-            json={"prompt": "test"},
-            timeout=25
-        )
+        img_url = random.choice(FALLBACK_IMAGES)
+        r = requests.get(img_url, timeout=10)
         r.raise_for_status()
 
-        # Här hade du normalt returnerat GPU-bilden
-        raise RuntimeError("GPU response handling not implemented")
+        b64 = base64.b64encode(r.content).decode("utf-8")
+        data_url = f"data:image/png;base64,{b64}"
+
+        return {
+            "ok": True,
+            "source": "fallback",
+            "image": data_url
+        }
 
     except Exception as e:
-        print("⚠️ Using fallback:", e)
-        fallback_path = get_fallback_image()
-        return FileResponse(
-            fallback_path,
-            media_type="image/png",
-            headers={"X-Fallback": "true"}
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": True,
+                "source": "fallback-error",
+                "image": None,
+                "error": str(e)
+            }
         )
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
