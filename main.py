@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import random
 import requests
 import base64
+from itertools import cycle
+
+from keep_alive import start_keep_alive
 
 app = FastAPI()
 
@@ -15,10 +16,16 @@ app.add_middleware(
 )
 
 # 🔁 WordPress fallback-bilder
-FALLBACK_IMAGES = [ 
-    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/01/hero_{i:02d}.png"
+FALLBACK_IMAGES = [
+    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/02/hero_{i:02d}.png"
     for i in range(1, 15)
 ]
+
+fallback_cycle = cycle(FALLBACK_IMAGES)
+
+@app.on_event("startup")
+def startup_event():
+    start_keep_alive()
 
 @app.post("/generate")
 async def generate(payload: dict):
@@ -28,7 +35,7 @@ async def generate(payload: dict):
     - Returnerar ALLTID en bild (fallback nu, GPU senare)
     """
     try:
-        img_url = random.choice(FALLBACK_IMAGES)
+        img_url = next(fallback_cycle)
         r = requests.get(img_url, timeout=10)
         r.raise_for_status()
 
@@ -36,21 +43,18 @@ async def generate(payload: dict):
         data_url = f"data:image/png;base64,{b64}"
 
         return {
-            "ok": True,
+            "status": "READY",
             "source": "fallback",
             "image": data_url
         }
 
     except Exception as e:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "ok": True,
-                "source": "fallback-error",
-                "image": None,
-                "error": str(e)
-            }
-        )
+        return {
+            "status": "READY",
+            "source": "fallback-error",
+            "image": None,
+            "error": str(e)
+        }
 
 @app.get("/health")
 async def health():
