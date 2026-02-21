@@ -2,13 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import base64
-<<<<<<< HEAD
 from itertools import cycle
-
 from keep_alive import start_keep_alive
-=======
 import os
->>>>>>> 385c568 (update)
 
 app = FastAPI()
 
@@ -35,14 +31,12 @@ FALLBACK_IMAGES = [
     for i in range(1, 15)
 ]
 
-<<<<<<< HEAD
 fallback_cycle = cycle(FALLBACK_IMAGES)
 
 @app.on_event("startup")
 def startup_event():
     start_keep_alive()
 
-=======
 import itertools
 
 # Round-robin index
@@ -78,8 +72,6 @@ def generate_via_gpu(payload):
     print("🚨 All GPUs failed")
     return None
         
->>>>>>> 385c568 (update)
-@app.post("/generate")
 @app.post("/generate")
 def generate(request: GenerateRequest):
 
