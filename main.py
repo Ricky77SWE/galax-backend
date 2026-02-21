@@ -8,6 +8,16 @@ import os
 
 app = FastAPI()
 
+from typing import Optional
+from pydantic import BaseModel
+
+class GenerateRequest(BaseModel):
+    prompt: Optional[str] = None
+    image_base64: Optional[str] = None
+
+@app.post("/generate")
+def generate(request: GenerateRequest):
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -71,9 +81,6 @@ def generate_via_gpu(payload):
 
     print("🚨 All GPUs failed")
     return None
-        
-@app.post("/generate")
-def generate(request: GenerateRequest):
 
     payload = {
         "prompt": request.prompt,
