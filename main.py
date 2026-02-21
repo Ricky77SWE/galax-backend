@@ -25,6 +25,7 @@ app.add_middleware(
 # =====================================================
 # REQUEST MODEL (MATCHAR draw.js)
 # =====================================================
+print("POSTING TO:", f"{base}/prompt")
 
 class GenerateRequest(BaseModel):
     styleKey: str
