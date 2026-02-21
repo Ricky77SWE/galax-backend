@@ -113,6 +113,24 @@ def build_workflow(style_key: str, seed: Optional[int]):
 # GPU GENERATION
 # =====================================================
 
+def wait_for_gpu(base_url, max_wait=60):
+    print("⏳ Waiting for GPU to wake...")
+    start = time.time()
+
+    while time.time() - start < max_wait:
+        try:
+            r = requests.get(f"{base_url}/system_stats", timeout=5)
+            if r.status_code == 200:
+                print("🟢 GPU awake")
+                return True
+        except:
+            pass
+
+        time.sleep(3)
+
+    print("🔴 GPU failed to wake")
+    return False
+    
 def generate_via_gpu(style_key: str, seed: Optional[int]):
 
     workflow = build_workflow(style_key, seed)
@@ -124,6 +142,10 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
         print(f"🔄 Trying GPU: {base}")
 
         try:
+            # 🟡 AUTO WAKE
+            if not wait_for_gpu(base):
+                continue
+
             # 1️⃣ SEND PROMPT
             r = requests.post(
                 f"{base}/prompt",
@@ -138,7 +160,6 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
             prompt_id = r.json().get("prompt_id")
 
             if not prompt_id:
-                print("❌ No prompt_id returned")
                 continue
 
             # 2️⃣ POLL HISTORY
@@ -177,14 +198,12 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
                         print("🟢 GPU SUCCESS")
                         return image_base64
 
-            print("⚠️ GPU timeout waiting for result")
-
         except Exception as e:
             print(f"❌ GPU failed {base}: {e}")
 
     print("🚨 All GPUs failed")
     return None
-
+    
 # =====================================================
 # FALLBACK IMAGES
 # =====================================================
