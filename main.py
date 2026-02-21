@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import requests
-import base64
 from itertools import cycle
 import itertools
 import os
@@ -44,7 +43,6 @@ gpu_cycle = itertools.cycle(GPU_ENDPOINTS)
 
 
 def generate_via_gpu(payload):
-
     for _ in range(len(GPU_ENDPOINTS)):
         endpoint = next(gpu_cycle)
         print(f"🔄 Trying GPU: {endpoint}")
@@ -84,10 +82,6 @@ FALLBACK_IMAGES = [
 fallback_cycle = cycle(FALLBACK_IMAGES)
 
 
-# -------------------------
-# Startup
-# -------------------------
-
 @app.on_event("startup")
 def startup_event():
     start_keep_alive()
@@ -105,7 +99,6 @@ def generate(request: GenerateRequest):
         "image": request.image_base64
     }
 
-    # 🔥 Try GPU first
     gpu_image = generate_via_gpu(payload)
 
     if gpu_image:
@@ -115,19 +108,12 @@ def generate(request: GenerateRequest):
             "image": gpu_image
         }
 
-    # 🔁 Fallback
-    img_url = next(fallback_cycle)
-
     return {
         "status": "READY",
         "source": "fallback",
-        "image": img_url
+        "image": next(fallback_cycle)
     }
 
-
-# -------------------------
-# Health
-# -------------------------
 
 @app.get("/health")
 async def health():
