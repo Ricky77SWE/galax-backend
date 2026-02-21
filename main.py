@@ -10,6 +10,15 @@ import time
 import base64
 
 # =====================================================
+# KEEP CPU ALIVE
+# =====================================================
+
+from keep_alive import start_keep_alive
+@app.on_event("startup")
+def startup_event():
+    start_keep_alive()
+
+# =====================================================
 # APP SETUP
 # =====================================================
 
@@ -45,7 +54,12 @@ GPU_TIMEOUT = 30
 POLL_INTERVAL = 1
 MAX_POLL_SECONDS = 90
 
-gpu_cycle = itertools.cycle(GPU_ENDPOINTS)
+# =====================================================
+# GPU STATE CACHE
+# =====================================================
+
+ACTIVE_GPU = None
+DEAD_GPUS = set()
 
 # =====================================================
 # WORKFLOW BUILDER
@@ -113,7 +127,7 @@ def build_workflow(style_key: str, seed: Optional[int]):
 # GPU GENERATION
 # =====================================================
 
-def wait_for_gpu(base_url, max_wait=60):
+def wait_for_gpu(base_url, max_wait=10):
     print("⏳ Waiting for GPU to wake...")
     start = time.time()
 
@@ -126,27 +140,42 @@ def wait_for_gpu(base_url, max_wait=60):
         except:
             pass
 
-        time.sleep(3)
+        time.sleep(2)
 
     print("🔴 GPU failed to wake")
     return False
     
 def generate_via_gpu(style_key: str, seed: Optional[int]):
 
+    global ACTIVE_GPU
+    global DEAD_GPUS
+
     workflow = build_workflow(style_key, seed)
 
-    for _ in range(len(GPU_ENDPOINTS)):
-        endpoint = next(gpu_cycle)
+    # 🔥 Prioritera fungerande GPU först
+    if ACTIVE_GPU:
+        endpoints = [ACTIVE_GPU] + [
+            e for e in GPU_ENDPOINTS if e != ACTIVE_GPU and e not in DEAD_GPUS
+        ]
+    else:
+        endpoints = [e for e in GPU_ENDPOINTS if e not in DEAD_GPUS]
+
+    for endpoint in endpoints:
+
         base = endpoint.rstrip("/")
-        
-        print("POSTING TO:", f"{base}/prompt")
+        print(f"🔄 Trying GPU: {base}")
+
+        # 🚫 hoppa över tidigare död GPU direkt
+        if base in DEAD_GPUS:
+            continue
 
         try:
-            # 🟡 AUTO WAKE
+            # 🟡 Wake check
             if not wait_for_gpu(base):
+                DEAD_GPUS.add(base)
                 continue
 
-            # 1️⃣ SEND PROMPT
+            # 1️⃣ POST PROMPT
             r = requests.post(
                 f"{base}/prompt",
                 json={
@@ -160,9 +189,10 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
             prompt_id = r.json().get("prompt_id")
 
             if not prompt_id:
+                DEAD_GPUS.add(base)
                 continue
 
-            # 2️⃣ POLL HISTORY
+            # 2️⃣ POLL
             start_time = time.time()
 
             while time.time() - start_time < MAX_POLL_SECONDS:
@@ -195,13 +225,24 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
 
                         image_base64 = base64.b64encode(img_resp.content).decode()
 
+                        # ✅ markera denna GPU som aktiv
+                        ACTIVE_GPU = base
+
+                        # 🧼 om den funkade, ta bort från dead list
+                        DEAD_GPUS.discard(base)
+
                         print("🟢 GPU SUCCESS")
                         return image_base64
 
+            print("⚠️ GPU timeout")
+            DEAD_GPUS.add(base)
+
         except Exception as e:
-            print(f"❌ GPU failed {base}: {e}")
+            print(f"❌ GPU error {base}: {e}")
+            DEAD_GPUS.add(base)
 
     print("🚨 All GPUs failed")
+    ACTIVE_GPU = None
     return None
     
 # =====================================================
