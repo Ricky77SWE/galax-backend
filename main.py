@@ -228,24 +228,6 @@ def wait_for_gpu(base_url, max_wait=10):
 ACTIVE_GPU = None
 DEAD_GPUS = set()
 
-def wait_for_gpu(base_url, max_wait=10):
-    print("⏳ Waiting for GPU to wake...")
-    start = time.time()
-
-    while time.time() - start < max_wait:
-        try:
-            r = requests.get(f"{base_url}/system_stats", timeout=5)
-            if r.status_code == 200:
-                print("🟢 GPU awake")
-                return True
-        except:
-            pass
-        time.sleep(2)
-
-    print("🔴 GPU failed to wake")
-    return False
-
-
 @app.post("/generate")
 def generate(request: GenerateRequest):
 
@@ -367,76 +349,6 @@ FALLBACK_IMAGES = [
 ]
 
 fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
-
-# =====================================================
-# API ENDPOINT
-# =====================================================
-
-@app.post("/generate")
-def generate(request: GenerateRequest):
-
-    for _ in range(len(GPU_ENDPOINTS)):
-
-        base = next(gpu_cycle)
-        print("POSTING TO:", base)
-
-        try:
-            uploaded_name = upload_to_comfy(base, request.image_base64)
-
-            workflow = build_workflow(
-                request.prompt,
-                request.seed,
-                uploaded_name
-            )
-
-            r = requests.post(
-                f"{base}/prompt",
-                json={"prompt": workflow, "client_id": "galax-backend"},
-                timeout=GPU_TIMEOUT
-            )
-
-            r.raise_for_status()
-            prompt_id = r.json()["prompt_id"]
-
-            # Poll
-            for _ in range(MAX_POLL_SECONDS):
-                time.sleep(POLL_INTERVAL)
-
-                history = requests.get(
-                    f"{base}/history/{prompt_id}",
-                    timeout=GPU_TIMEOUT
-                ).json()
-
-                if prompt_id in history:
-                    outputs = history[prompt_id]["outputs"]
-
-                    for node in outputs.values():
-                        if "images" in node:
-                            image_info = node["images"][0]
-
-                            img = requests.get(
-                                f"{base}/view",
-                                params=image_info,
-                                timeout=GPU_TIMEOUT
-                            ).content
-
-                            img_b64 = base64.b64encode(img).decode("utf-8")
-
-                            return {
-                                "status": "READY",
-                                "source": base,
-                                "image": f"data:image/png;base64,{img_b64}"
-                            }
-
-            print("Timeout waiting for GPU")
-
-        except Exception as e:
-            print("GPU failed:", e)
-
-    return {
-        "status": "ERROR",
-        "error": "All GPUs failed"
-    }
 
 # =====================================================
 # STATUS CHECK
