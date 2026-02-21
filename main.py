@@ -9,6 +9,8 @@ import random
 import time
 import base64
 
+app = FastAPI()
+
 # =====================================================
 # KEEP CPU ALIVE
 # =====================================================
@@ -21,8 +23,6 @@ def startup_event():
 # =====================================================
 # APP SETUP
 # =====================================================
-
-app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
