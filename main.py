@@ -38,6 +38,7 @@ app.add_middleware(
 class GenerateRequest(BaseModel):
     styleKey: str
     seed: Optional[int] = None
+    image_base64: str
     mode: Optional[str] = None
     clientId: Optional[str] = None
 
