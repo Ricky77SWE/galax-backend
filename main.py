@@ -150,7 +150,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_image_name: str
         },
         "7": {
             "class_type": "LoadImage",
-            "inputs": {"image": uploaded_image_name}
+            "inputs": {"image": uploaded_name}
         },
         "9": {
             "class_type": "ControlNetApply",
@@ -224,17 +224,38 @@ def wait_for_gpu(base_url, max_wait=10):
     print("🔴 GPU failed to wake")
     return False
     
-def generate_via_gpu(style_key: str, seed: Optional[int]):
+ACTIVE_GPU = None
+DEAD_GPUS = set()
+
+def wait_for_gpu(base_url, max_wait=10):
+    print("⏳ Waiting for GPU to wake...")
+    start = time.time()
+
+    while time.time() - start < max_wait:
+        try:
+            r = requests.get(f"{base_url}/system_stats", timeout=5)
+            if r.status_code == 200:
+                print("🟢 GPU awake")
+                return True
+        except:
+            pass
+        time.sleep(2)
+
+    print("🔴 GPU failed to wake")
+    return False
+
+
+@app.post("/generate")
+def generate(request: GenerateRequest):
 
     global ACTIVE_GPU
     global DEAD_GPUS
 
-    workflow = build_workflow(style_key, seed)
-
-    # 🔥 Prioritera fungerande GPU först
+    # 🔥 prioritera fungerande GPU
     if ACTIVE_GPU:
         endpoints = [ACTIVE_GPU] + [
-            e for e in GPU_ENDPOINTS if e != ACTIVE_GPU and e not in DEAD_GPUS
+            e for e in GPU_ENDPOINTS
+            if e != ACTIVE_GPU and e not in DEAD_GPUS
         ]
     else:
         endpoints = [e for e in GPU_ENDPOINTS if e not in DEAD_GPUS]
@@ -242,19 +263,27 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
     for endpoint in endpoints:
 
         base = endpoint.rstrip("/")
-        print(f"🔄 Trying GPU: {base}")
+        print("🔄 Trying:", base)
 
-        # 🚫 hoppa över tidigare död GPU direkt
         if base in DEAD_GPUS:
             continue
 
         try:
-            # 🟡 Wake check
             if not wait_for_gpu(base):
                 DEAD_GPUS.add(base)
                 continue
 
-            # 1️⃣ POST PROMPT
+            # 1️⃣ upload bild
+            uploaded_name = upload_to_comfy(base, request.image_base64)
+
+            # 2️⃣ bygg workflow
+            workflow = build_workflow(
+                request.prompt,
+                request.seed,
+                uploaded_name
+            )
+
+            # 3️⃣ skicka prompt
             r = requests.post(
                 f"{base}/prompt",
                 json={
@@ -265,13 +294,9 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
             )
 
             r.raise_for_status()
-            prompt_id = r.json().get("prompt_id")
+            prompt_id = r.json()["prompt_id"]
 
-            if not prompt_id:
-                DEAD_GPUS.add(base)
-                continue
-
-            # 2️⃣ POLL
+            # 4️⃣ poll
             start_time = time.time()
 
             while time.time() - start_time < MAX_POLL_SECONDS:
@@ -302,27 +327,34 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
                         img_resp = requests.get(view_url, timeout=20)
                         img_resp.raise_for_status()
 
-                        image_base64 = base64.b64encode(img_resp.content).decode()
+                        image_base64 = base64.b64encode(
+                            img_resp.content
+                        ).decode()
 
-                        # ✅ markera denna GPU som aktiv
                         ACTIVE_GPU = base
-
-                        # 🧼 om den funkade, ta bort från dead list
                         DEAD_GPUS.discard(base)
 
                         print("🟢 GPU SUCCESS")
-                        return image_base64
+
+                        return {
+                            "status": "READY",
+                            "source": base,
+                            "image": f"data:image/png;base64,{image_base64}"
+                        }
 
             print("⚠️ GPU timeout")
             DEAD_GPUS.add(base)
 
         except Exception as e:
-            print(f"❌ GPU error {base}: {e}")
+            print("❌ GPU error:", e)
             DEAD_GPUS.add(base)
 
-    print("🚨 All GPUs failed")
     ACTIVE_GPU = None
-    return None
+
+    return {
+        "status": "ERROR",
+        "error": "All GPUs failed"
+    }
     
 # =====================================================
 # FALLBACK IMAGES
