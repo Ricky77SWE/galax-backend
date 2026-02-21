@@ -25,7 +25,6 @@ app.add_middleware(
 # =====================================================
 # REQUEST MODEL (MATCHAR draw.js)
 # =====================================================
-print("POSTING TO:", f"{base}/prompt")
 
 class GenerateRequest(BaseModel):
     styleKey: str
@@ -139,8 +138,8 @@ def generate_via_gpu(style_key: str, seed: Optional[int]):
     for _ in range(len(GPU_ENDPOINTS)):
         endpoint = next(gpu_cycle)
         base = endpoint.rstrip("/")
-
-        print(f"🔄 Trying GPU: {base}")
+        
+        print("POSTING TO:", f"{base}/prompt")
 
         try:
             # 🟡 AUTO WAKE
