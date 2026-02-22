@@ -64,47 +64,93 @@ ACTIVE_GPU = None
 DEAD_GPUS = set()
 
 # =====================================================
-# GALAX STYLE DESCRIPTIONS (från draw.js)
+# GALAX STYLE DESCRIPTIONS
 # =====================================================
+
+import random
+from typing import Optional
+
+PROPORTION_VARIATIONS = [
+    "slightly rounder body proportions",
+    "slightly taller creature proportions",
+    "slightly bigger head compared to body",
+    "slightly shorter legs",
+    "slightly longer arms"
+]
+
+TEXTURE_VARIATIONS = [
+    "soft plush surface",
+    "soft fluffy fur",
+    "smooth animated texture",
+    "velvet-like creature skin"
+]
+
+BODY_VARIATIONS = [
+    "slightly taller proportions",
+    "slightly rounder proportions",
+    "slightly shorter legs",
+    "slightly bigger head",
+    "slightly longer arms"
+]
+
+TEXTURE_VARIATIONS = [
+    "soft plush surface",
+    "soft fluffy fur",
+    "smooth animated texture",
+    "velvet-like creature skin"
+]
+
+POSE_VARIATIONS = [
+    "natural relaxed pose",
+    "friendly open stance",
+    "subtle playful posture"
+]
 
 GALAX_DESCRIPTIONS = {
 
     "blobbis": (
-        "Small plush creature with round body and short legs. "
-        "Soft fluffy fur covering entire body. "
-        "Clearly non-human. Cute and friendly expression."
+        "Small plush creature with compact rounded body. "
+        "Clear readable silhouette. Cute friendly expression."
     ),
 
     "kramis": (
-        "Large fluffy monster creature with thick soft fur. "
-        "Big rounded body, long friendly arms. "
-        "Completely covered in fur. Clearly not human."
+        "Large friendly creature with big body and strong soft presence. "
+        "Rounded silhouette. Gentle smiling eyes."
     ),
 
     "plupp": (
-        "Small magical glowing creature with soft luminous skin. "
-        "Tiny wings attached to back. "
-        "Clearly fantasy creature, not human anatomy."
+        "Small magical glowing creature with light delicate body. "
+        "Clear fantasy silhouette. Cheerful personality."
     ),
 
     "snurroga": (
-        "Colorful fantasy creature with playful costume patterns. "
-        "Exaggerated creature proportions. "
-        "Fully covered body. Non-human."
+        "Colorful playful fantasy creature with expressive face. "
+        "Distinct silhouette and joyful presence."
     ),
 
     "sticky": (
-        "Agile animated fantasy creature superhero wearing full-body soft costume. "
-        "No exposed skin. Creature-like proportions. "
-        "Flexible cartoon anatomy. Clearly non-human."
+        "Agile fantasy creature superhero with dynamic pose. "
+        "Flexible cartoon creature anatomy."
     ),
 
     "wille": (
         "Tiny baby fantasy creature with oversized head and small body. "
-        "Soft plush texture covering entire body. "
-        "Innocent joyful expression. Not human."
+        "Innocent joyful expression."
     )
 }
+
+BACKGROUND_VARIATIONS = [
+    "soft magical forest background",
+    "colorful sky background",
+    "simple gradient background",
+    "soft glowing fantasy environment",
+    "subtle playful background"
+]
+
+bg = random.choice(BACKGROUND_VARIATIONS)
+...
+f"{bg}. "
+
 
 # =====================================================
 # IMAGE UPLOAD (flyttad från draw.js)
@@ -142,137 +188,127 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     style_text = GALAX_DESCRIPTIONS.get(style_key, "")
     seed = seed or random.randint(1, 999999999)
 
+    # Subtil variation (60% chans)
+    variation_text = ""
+    if random.random() < 0.6:
+        proportion = random.choice(PROPORTION_VARIATIONS)
+        texture = random.choice(TEXTURE_VARIATIONS)
+        variation_text = f"{proportion}. {texture}. "
+
+    # ----------------------------
+    # MASTER SAFE + IMAGE-DRIVEN PROMPT
+    # ----------------------------
+
     positive_text = (
         "High-quality stylized 3D animated fantasy creature. "
-        "Clearly NON-HUMAN. Creature-like anatomy. "
-        "No human body structure. No human skin. "
-        "Fully covered in fur, scales, fabric, or soft creature texture. "
-        "Child-friendly design. "
-        "Soft lighting, Pixar-style rendering. "
+        "STRICTLY match the original drawing silhouette and proportions. "
+        "Preserve the exact body shape from the drawing. "
+        "PRIMARY BODY COLORS MUST MATCH THE DRAWING EXACTLY. "
+        "Do not shift hue. Do not recolor. Do not invent new dominant colors. "
+        "Clearly NON-HUMAN creature. "
+        "Fully covered body (fur, fabric, scales or soft creature surface). "
+        "No visible human skin. "
+        "Exaggerated cartoon creature style. "
+        "Soft global illumination, cinematic lighting, rim light. "
+        f"{variation_text}"
         + style_text
     )
 
     negative_text = (
-        "human, realistic human, human anatomy, "
-        "female body, male body, nude, naked, topless, nipples, breasts, genitalia, "
-        "realistic skin, skin texture, bare skin, "
-        "marvel style, dc comics style, "
-        "photorealistic, hyperrealistic"
-        "marvel style, dc comics style, spiderman, batman, superman, "
-        "photorealistic, film grain, watermark, signature, "
-        "outline, scribbles, tangled lines, messy sketch, "
-        "creepy, horror, dark horror style, "
-        "floating head, dismembered limbs, "
-        "hyper-detailed skin pores, realistic skin texture"
+        "human, realistic human, human anatomy, human proportions, "
+        "male body, female body, realistic muscles, realistic skin, "
+        "nude, naked, topless, nipples, breasts, genitalia, underwear, "
+        "marvel style, dc comics style, superhero in spandex, "
+        "photorealistic, hyperrealistic, horror, creepy, "
+        "wrong colors, hue shift, desaturated colors, recolored body"
     )
 
     P = {
         "1": {
             "class_type": "CheckpointLoaderSimple",
-            "inputs": {
-                "ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
-            }
+            "inputs": {"ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"}
         },
+
         "2": {
             "class_type": "VAELoader",
-            "inputs": {
-                "vae_name": "sdxl_vae.safetensors"
-            }
+            "inputs": {"vae_name": "sdxl_vae.safetensors"}
         },
+
         "3": {
             "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": positive_text,
-                "clip": ["1", 1]
-            }
+            "inputs": {"text": positive_text, "clip": ["1", 1]}
         },
+
         "4": {
             "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": negative_text,
-                "clip": ["1", 1]
-            }
+            "inputs": {"text": negative_text, "clip": ["1", 1]}
         },
+
         "6": {
             "class_type": "ControlNetLoader",
-            "inputs": {
-                "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
-            }
+            "inputs": {"control_net_name": "controlnet-depth-sdxl-1.0.safetensors"}
         },
+
         "7": {
             "class_type": "LoadImage",
-            "inputs": {
-                "image": uploaded_name
-            }
+            "inputs": {"image": uploaded_name}
         },
+
         "9": {
             "class_type": "ControlNetApply",
             "inputs": {
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.55,
+                "strength": 0.75,   # 👈 Viktigt: högre för bättre form-match
                 "guidance_start": 0.00,
                 "guidance_end": 0.95
             }
         },
+
         "10": {
             "class_type": "LoraLoader",
             "inputs": {
                 "model": ["1", 0],
                 "clip": ["1", 1],
                 "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.40,
-                "strength_clip": 0.40
+                "strength_model": 0.35,
+                "strength_clip": 0.35
             }
         },
+
         "11": {
             "class_type": "EmptyLatentImage",
-            "inputs": {
-                "width": 896,
-                "height": 896,
-                "batch_size": 1
-            }
+            "inputs": {"width": 896, "height": 896, "batch_size": 1}
         },
+
         "12": {
             "class_type": "KSampler",
             "inputs": {
                 "model": ["10", 0],
                 "positive": ["9", 0],
                 "negative": ["4", 0],
-                "seed": int(seed or 123456789),
-                "steps": 32,
-                "cfg": 2.8,
+                "seed": seed,
+                "steps": 28,
+                "cfg": 3.0,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
                 "denoise": 1.0,
                 "latent_image": ["11", 0]
             }
         },
+
         "13": {
             "class_type": "VAEDecode",
-            "inputs": {
-                "samples": ["12", 0],
-                "vae": ["2", 0]
-            }
+            "inputs": {"samples": ["12", 0], "vae": ["2", 0]}
         },
-        "15": {
-            "class_type": "PreviewImage",
-            "inputs": {
-                "images": ["13", 0],
-                "every_n_steps": 3,
-                "filename_prefix": "galax_preview"
-            }
-        },
+
         "14": {
             "class_type": "SaveImage",
-            "inputs": {
-                "images": ["13", 0],
-                "filename_prefix": "galax_depth_only"
-            }
+            "inputs": {"images": ["13", 0], "filename_prefix": "galax_depth_only"}
         }
     }
-    
+
     return P
 
 # =====================================================
