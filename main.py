@@ -78,13 +78,6 @@ PROPORTION_VARIATIONS = [
     "slightly longer arms"
 ]
 
-TEXTURE_VARIATIONS = [
-    "soft plush surface",
-    "soft fluffy fur",
-    "smooth animated texture",
-    "velvet-like creature skin"
-]
-
 BODY_VARIATIONS = [
     "slightly taller proportions",
     "slightly rounder proportions",
@@ -104,6 +97,14 @@ POSE_VARIATIONS = [
     "natural relaxed pose",
     "friendly open stance",
     "subtle playful posture"
+]
+
+BACKGROUND_VARIATIONS = [
+    "soft magical forest background",
+    "colorful sky background",
+    "simple gradient background",
+    "soft glowing fantasy environment",
+    "subtle playful background"
 ]
 
 GALAX_DESCRIPTIONS = {
@@ -139,19 +140,6 @@ GALAX_DESCRIPTIONS = {
     )
 }
 
-BACKGROUND_VARIATIONS = [
-    "soft magical forest background",
-    "colorful sky background",
-    "simple gradient background",
-    "soft glowing fantasy environment",
-    "subtle playful background"
-]
-
-bg = random.choice(BACKGROUND_VARIATIONS)
-...
-f"{bg}. "
-
-
 # =====================================================
 # IMAGE UPLOAD (flyttad från draw.js)
 # =====================================================
@@ -186,129 +174,145 @@ def upload_to_comfy(base_url, image_base64):
 def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
 
     style_text = GALAX_DESCRIPTIONS.get(style_key, "")
+
+    prop = random.choice(PROPORTION_VARIATIONS)
+    body = random.choice(BODY_VARIATIONS)
+    texture = random.choice(TEXTURE_VARIATIONS)
+    pose = random.choice(POSE_VARIATIONS)
+    bg = random.choice(BACKGROUND_VARIATIONS)
+
+    variation_text = (
+        f"{prop}, {body}, {texture}, {pose}, {bg}. "
+    )
+    
     seed = seed or random.randint(1, 999999999)
-
-    # Subtil variation (60% chans)
-    variation_text = ""
-    if random.random() < 0.6:
-        proportion = random.choice(PROPORTION_VARIATIONS)
-        texture = random.choice(TEXTURE_VARIATIONS)
-        variation_text = f"{proportion}. {texture}. "
-
-    # ----------------------------
-    # MASTER SAFE + IMAGE-DRIVEN PROMPT
-    # ----------------------------
 
     positive_text = (
         "High-quality stylized 3D animated fantasy creature. "
-        "STRICTLY match the original drawing silhouette and proportions. "
-        "Preserve the exact body shape from the drawing. "
-        "PRIMARY BODY COLORS MUST MATCH THE DRAWING EXACTLY. "
-        "Do not shift hue. Do not recolor. Do not invent new dominant colors. "
+        "Inspired by the original drawing shape and colors. "
+        "Keep overall silhouette similar but allow creative refinement. "
+        "Preserve dominant colors from the drawing. "
         "Clearly NON-HUMAN creature. "
-        "Fully covered body (fur, fabric, scales or soft creature surface). "
-        "No visible human skin. "
-        "Exaggerated cartoon creature style. "
-        "Soft global illumination, cinematic lighting, rim light. "
+        "Fully covered body with fur, fabric or soft creature surface. "
+        "Friendly children animation style. "
+        "Soft cinematic lighting, depth of field. "
         f"{variation_text}"
-        + style_text
+        f"{style_text}"
     )
 
     negative_text = (
-        "human, realistic human, human anatomy, human proportions, "
-        "male body, female body, realistic muscles, realistic skin, "
-        "nude, naked, topless, nipples, breasts, genitalia, underwear, "
-        "marvel style, dc comics style, superhero in spandex, "
-        "photorealistic, hyperrealistic, horror, creepy, "
-        "wrong colors, hue shift, desaturated colors, recolored body"
+        "realistic human, realistic anatomy, nude, naked, nipples, genitalia, "
+        "photorealistic, horror, creepy, glitch, distorted body, "
+        "broken anatomy, extra limbs, melted body"
     )
 
     P = {
         "1": {
             "class_type": "CheckpointLoaderSimple",
-            "inputs": {"ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"}
+            "inputs": {
+                "ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+            }
         },
-
         "2": {
             "class_type": "VAELoader",
-            "inputs": {"vae_name": "sdxl_vae.safetensors"}
+            "inputs": {
+                "vae_name": "sdxl_vae.safetensors"
+            }
         },
-
         "3": {
             "class_type": "CLIPTextEncode",
-            "inputs": {"text": positive_text, "clip": ["1", 1]}
+            "inputs": {
+                "text": positive_text,
+                "clip": ["1", 1]
+            }
         },
-
         "4": {
             "class_type": "CLIPTextEncode",
-            "inputs": {"text": negative_text, "clip": ["1", 1]}
+            "inputs": {
+                "text": negative_text,
+                "clip": ["1", 1]
+            }
         },
-
         "6": {
             "class_type": "ControlNetLoader",
-            "inputs": {"control_net_name": "controlnet-depth-sdxl-1.0.safetensors"}
+            "inputs": {
+                "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
+            }
         },
-
         "7": {
             "class_type": "LoadImage",
-            "inputs": {"image": uploaded_name}
+            "inputs": {
+                "image": uploaded_name
+            }
         },
-
         "9": {
             "class_type": "ControlNetApply",
             "inputs": {
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.75,   # 👈 Viktigt: högre för bättre form-match
+                "strength": 0.75,
                 "guidance_start": 0.00,
                 "guidance_end": 0.95
             }
         },
-
         "10": {
             "class_type": "LoraLoader",
             "inputs": {
                 "model": ["1", 0],
                 "clip": ["1", 1],
                 "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.35,
-                "strength_clip": 0.35
+                "strength_model": 0.40,
+                "strength_clip": 0.40
             }
         },
-
         "11": {
             "class_type": "EmptyLatentImage",
-            "inputs": {"width": 896, "height": 896, "batch_size": 1}
+            "inputs": {
+                "width": 896,
+                "height": 896,
+                "batch_size": 1
+            }
         },
-
         "12": {
             "class_type": "KSampler",
             "inputs": {
                 "model": ["10", 0],
                 "positive": ["9", 0],
                 "negative": ["4", 0],
-                "seed": seed,
+                "seed": int(seed or 123456789),
                 "steps": 28,
-                "cfg": 3.0,
+                "cfg": 2.8,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
                 "denoise": 1.0,
                 "latent_image": ["11", 0]
             }
         },
-
         "13": {
             "class_type": "VAEDecode",
-            "inputs": {"samples": ["12", 0], "vae": ["2", 0]}
+            "inputs": {
+                "samples": ["12", 0],
+                "vae": ["2", 0]
+            }
         },
-
+        "15": {
+            "class_type": "PreviewImage",
+            "inputs": {
+                "images": ["13", 0],
+                "every_n_steps": 3,
+                "filename_prefix": "galax_preview"
+            }
+        },
         "14": {
             "class_type": "SaveImage",
-            "inputs": {"images": ["13", 0], "filename_prefix": "galax_depth_only"}
+            "inputs": {
+                "images": ["13", 0],
+                "filename_prefix": "galax_depth_only"
+            }
         }
     }
-
+    
     return P
 
 # =====================================================
