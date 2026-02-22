@@ -149,25 +149,6 @@ def build_workflow(style_key: str, seed: Optional[int]):
             "class_type": "CLIPTextEncode",
             "inputs": {"text": negative_text, "clip": ["1", 1]}
         },
-        "6": {
-            "class_type": "ControlNetLoader",
-            "inputs": {"control_net_name": "controlnet-depth-sdxl-1.0.safetensors"}
-        },
-        "7": {
-            "class_type": "LoadImage",
-            "inputs": {"image": uploaded_name}
-        },
-        "9": {
-            "class_type": "ControlNetApply",
-            "inputs": {
-                "conditioning": ["3", 0],
-                "control_net": ["6", 0],
-                "image": ["7", 0],
-                "strength": 0.55,
-                "guidance_start": 0.00,
-                "guidance_end": 0.95
-            }
-        },
         "10": {
             "class_type": "LoraLoader",
             "inputs": {
@@ -186,7 +167,7 @@ def build_workflow(style_key: str, seed: Optional[int]):
             "class_type": "KSampler",
             "inputs": {
                 "model": ["10", 0],
-                "positive": ["9", 0],
+                "positive": ["3", 0],   # ← viktigt!
                 "negative": ["4", 0],
                 "seed": seed,
                 "steps": 32,
