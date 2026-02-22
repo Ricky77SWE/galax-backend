@@ -70,45 +70,39 @@ DEAD_GPUS = set()
 GALAX_DESCRIPTIONS = {
 
     "blobbis": (
-        "Small non-human fantasy creature with compact rounded body and short legs. "
-        "Soft plush texture, slightly oversized head, tiny expressive arms. "
-        "Clear creature silhouette, not human anatomy. "
-        "Playful and curious personality."
+        "Small plush creature with round body and short legs. "
+        "Soft fluffy fur covering entire body. "
+        "Clearly non-human. Cute and friendly expression."
     ),
 
     "kramis": (
-        "Large fluffy non-human monster with thick fur and big rounded body. "
-        "Short legs, long friendly arms, big feet. "
-        "Creature-like proportions, clearly not human. "
-        "Warm, huggable appearance with gentle smiling eyes."
+        "Large fluffy monster creature with thick soft fur. "
+        "Big rounded body, long friendly arms. "
+        "Completely covered in fur. Clearly not human."
     ),
 
     "plupp": (
-        "Small glowing fantasy creature with slim body and delicate limbs. "
-        "Soft luminous skin, translucent wings attached to back. "
-        "Clearly non-human anatomy, magical fairy-like creature. "
-        "Cheerful and light personality."
+        "Small magical glowing creature with soft luminous skin. "
+        "Tiny wings attached to back. "
+        "Clearly fantasy creature, not human anatomy."
     ),
 
     "snurroga": (
-        "Medium-sized colorful fantasy creature with playful costume-like patterns. "
-        "Exaggerated head, uneven quirky limbs, asymmetrical creature proportions. "
-        "Clearly not human anatomy. "
-        "Joyful mischievous expression."
+        "Colorful fantasy creature with playful costume patterns. "
+        "Exaggerated creature proportions. "
+        "Fully covered body. Non-human."
     ),
 
     "sticky": (
-        "Agile non-human fantasy creature superhero with stylized exaggerated limbs. "
-        "Slim but creature-like torso, flexible animated body. "
-        "Not human proportions, not realistic anatomy. "
-        "Energetic and playful stance."
+        "Agile animated fantasy creature superhero wearing full-body soft costume. "
+        "No exposed skin. Creature-like proportions. "
+        "Flexible cartoon anatomy. Clearly non-human."
     ),
 
     "wille": (
-        "Tiny extremely cute non-human baby creature. "
-        "Very small body with oversized head, rounded cheeks, tiny limbs. "
-        "Clearly creature-like proportions, not human anatomy. "
-        "Big sparkling eyes and joyful innocent smile."
+        "Tiny baby fantasy creature with oversized head and small body. "
+        "Soft plush texture covering entire body. "
+        "Innocent joyful expression. Not human."
     )
 }
 
@@ -149,20 +143,21 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     seed = seed or random.randint(1, 999999999)
 
     positive_text = (
-        "High-quality stylized 3D CGI animated fantasy creature. "
-        "Clearly NON-HUMAN, creature-like anatomy, exaggerated proportions. "
-        "Soft rounded shapes, expressive face, child-friendly design. "
-        "Pixar-style lighting, soft global illumination, subtle rim light, "
-        "volumetric soft shadows, cinematic depth of field. "
-        "Vibrant but harmonious colors. "
-        "Full body visible, centered composition. "
-        "No realistic human anatomy. "
+        "High-quality stylized 3D animated fantasy creature. "
+        "Clearly NON-HUMAN. Creature-like anatomy. "
+        "No human body structure. No human skin. "
+        "Fully covered in fur, scales, fabric, or soft creature texture. "
+        "Child-friendly design. "
+        "Soft lighting, Pixar-style rendering. "
         + style_text
     )
 
     negative_text = (
-        "realistic human anatomy, human proportions, human superhero, "
-        "adult human, realistic muscles, six pack, human face, "
+        "human, realistic human, human anatomy, "
+        "female body, male body, nude, naked, topless, nipples, breasts, genitalia, "
+        "realistic skin, skin texture, bare skin, "
+        "marvel style, dc comics style, "
+        "photorealistic, hyperrealistic"
         "marvel style, dc comics style, spiderman, batman, superman, "
         "photorealistic, film grain, watermark, signature, "
         "outline, scribbles, tangled lines, messy sketch, "
@@ -247,7 +242,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "negative": ["4", 0],
                 "seed": int(seed or 123456789),
                 "steps": 32,
-                "cfg": 3.3,
+                "cfg": 2.8,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
                 "denoise": 1.0,
