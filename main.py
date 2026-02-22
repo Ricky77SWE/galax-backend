@@ -38,7 +38,6 @@ app.add_middleware(
 class GenerateRequest(BaseModel):
     styleKey: str
     seed: Optional[int] = None
-    image_base64: str
     mode: Optional[str] = None
     clientId: Optional[str] = None
 
@@ -111,7 +110,7 @@ def upload_to_comfy(base_url, image_base64):
 # WORKFLOW (1:1 från draw.js)
 # =====================================================
 
-def build_workflow(style_key: str, seed: Optional[int], uploaded_image_name: str):
+def build_workflow(style_key: str, seed: Optional[int]):
 
     style_text = GALAX_DESCRIPTIONS.get(style_key, "")
     seed = seed or random.randint(1, 999999999)
@@ -229,9 +228,37 @@ def wait_for_gpu(base_url, max_wait=10):
 
     print("🔴 GPU failed to wake")
     return False
-    
+
+from fastapi import Request
+from pydantic import ValidationError
+
 @app.post("/generate")
-def generate(request: GenerateRequest):
+async def generate(request: Request):
+
+    print("========== /generate CALLED ==========")
+
+    try:
+        body = await request.json()
+        print("RAW BODY:", body)
+
+        parsed = GenerateRequest(**body)
+
+        print("Parsed:")
+        print("  styleKey:", parsed.styleKey)
+        print("  seed:", parsed.seed)
+        print("  mode:", parsed.mode)
+        print("  clientId:", parsed.clientId)
+
+    except ValidationError as ve:
+        print("❌ VALIDATION ERROR:", ve)
+        return {"status": "ERROR", "error": "Invalid request format"}
+
+    except Exception as e:
+        print("❌ BODY PARSE ERROR:", e)
+        return {"status": "ERROR", "error": "Bad JSON"}
+
+    styleKey = parsed.styleKey
+    seed = parsed.seed
 
     global ACTIVE_GPU
     global DEAD_GPUS
@@ -258,17 +285,9 @@ def generate(request: GenerateRequest):
                 DEAD_GPUS.add(base)
                 continue
 
-            # 1️⃣ upload bild
-            uploaded_name = upload_to_comfy(base, request.image_base64)
+            # 🔥 INGEN upload längre
+            workflow = build_workflow(styleKey, seed)
 
-            # 2️⃣ bygg workflow
-            workflow = build_workflow(
-                request.styleKey,
-                request.seed,
-                uploaded_name
-            )
-
-            # 3️⃣ skicka prompt
             r = requests.post(
                 f"{base}/prompt",
                 json={
@@ -281,7 +300,6 @@ def generate(request: GenerateRequest):
             r.raise_for_status()
             prompt_id = r.json()["prompt_id"]
 
-            # 4️⃣ poll
             start_time = time.time()
 
             while time.time() - start_time < MAX_POLL_SECONDS:
@@ -335,6 +353,8 @@ def generate(request: GenerateRequest):
             DEAD_GPUS.add(base)
 
     ACTIVE_GPU = None
+
+    print("⚠️ All GPUs failed → fallback")
 
     return {
         "status": "READY",
