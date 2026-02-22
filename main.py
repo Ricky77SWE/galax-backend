@@ -282,10 +282,37 @@ async def generate(request: GenerateRequest):
                     continue
 
                 data = h.json()
-                outputs = data.get(prompt_id, {}).get("outputs", {})
+                history_data = h.json()
 
-                for node in outputs.values():
-                    if "images" in node:
+                if prompt_id not in history_data:
+                    continue
+
+                prompt_outputs = history_data[prompt_id].get("outputs", {})
+
+                for node_id, node_data in prompt_outputs.items():
+                    if "images" in node_data and len(node_data["images"]) > 0:
+
+                        image_meta = node_data["images"][0]
+
+                        view_url = (
+                            f"{base}/view?"
+                            f"filename={image_meta['filename']}&"
+                            f"subfolder={image_meta.get('subfolder','')}&"
+                            f"type={image_meta.get('type','output')}"
+                        )
+
+                        img_resp = requests.get(view_url, timeout=20)
+                        img_resp.raise_for_status()
+
+                        image_base64 = base64.b64encode(img_resp.content).decode()
+
+                        print("🟢 IMAGE FOUND in node:", node_id)
+
+                        return {
+                            "status": "READY",
+                            "source": base,
+                            "image": f"data:image/png;base64,{image_base64}"
+                        }
                         image_meta = node["images"][0]
 
                         view_url = (
