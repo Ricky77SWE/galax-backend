@@ -235,6 +235,8 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         }
     }
+    
+    return P
 
 # =====================================================
 # GPU GENERATION
