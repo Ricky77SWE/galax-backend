@@ -48,7 +48,8 @@ class GenerateRequest(BaseModel):
 
 GPU_ENDPOINTS = [
     "https://w3gfk2krqc76x4-8188.proxy.runpod.net",
-    "https://iygoioc7o5hytl-8188.proxy.runpod.net"
+    "https://iygoioc7o5hytl-8188.proxy.runpod.net",
+    "https://n8ghjjv9kdbhez-8188.proxy.runpod.net"
 ]
 
 GPU_TIMEOUT = 30
