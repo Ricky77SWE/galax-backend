@@ -68,12 +68,48 @@ DEAD_GPUS = set()
 # =====================================================
 
 GALAX_DESCRIPTIONS = {
-    "blobbis":  "Small animal with short arms and legs. Smooth soft surface with gentle edges, not round or spherical. Friendly face with large eye or eyes, clear silhouette.",
-    "kramis":   "Very large hug monster with distinct head, short legs, and long arms. Thick fluffy fur with visible volume. Broad shoulders, big feet, gentle expressive eyes.",
-    "plupp":    "Small slim animal-like character with thin arms and legs, bright glowing body. Large eyes. Translucent wings attached directly to the back, clearly visible in depth.",
-    "snurroga": "Medium-sized creature dressed who looks like a clown with big head, arms and one short leg. Happy patterns on clothing. Balanced proportions, joyful facial expression.",
-    "sticky":   "Agile athletic superhero character with slim torso and clearly defined limbs. Alert climbing-ready posture, sharp silhouette, mischievous friendly face.",
-    "wille":    "Tiny extremely cute baby character with very small body and oversized head. Short arms and legs, rounded cheeks, big sparkling eyes. Happy smile with tongue slightly out, stable standing pose."
+
+    "blobbis": (
+        "Small non-human fantasy creature with compact rounded body and short legs. "
+        "Soft plush texture, slightly oversized head, tiny expressive arms. "
+        "Clear creature silhouette, not human anatomy. "
+        "Playful and curious personality."
+    ),
+
+    "kramis": (
+        "Large fluffy non-human monster with thick fur and big rounded body. "
+        "Short legs, long friendly arms, big feet. "
+        "Creature-like proportions, clearly not human. "
+        "Warm, huggable appearance with gentle smiling eyes."
+    ),
+
+    "plupp": (
+        "Small glowing fantasy creature with slim body and delicate limbs. "
+        "Soft luminous skin, translucent wings attached to back. "
+        "Clearly non-human anatomy, magical fairy-like creature. "
+        "Cheerful and light personality."
+    ),
+
+    "snurroga": (
+        "Medium-sized colorful fantasy creature with playful costume-like patterns. "
+        "Exaggerated head, uneven quirky limbs, asymmetrical creature proportions. "
+        "Clearly not human anatomy. "
+        "Joyful mischievous expression."
+    ),
+
+    "sticky": (
+        "Agile non-human fantasy creature superhero with stylized exaggerated limbs. "
+        "Slim but creature-like torso, flexible animated body. "
+        "Not human proportions, not realistic anatomy. "
+        "Energetic and playful stance."
+    ),
+
+    "wille": (
+        "Tiny extremely cute non-human baby creature. "
+        "Very small body with oversized head, rounded cheeks, tiny limbs. "
+        "Clearly creature-like proportions, not human anatomy. "
+        "Big sparkling eyes and joyful innocent smile."
+    )
 }
 
 # =====================================================
@@ -113,20 +149,26 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     seed = seed or random.randint(1, 999999999)
 
     positive_text = (
-        "Cute, friendly, 3D CGI children movie single superhero-creature "
-        "that matches the drawing's shape and colors. "
-        "Face and body with at least one leg or/and one arm. "
-        "Soft studio lighting, subtle rim light, volumetric soft shadows, "
-        "shallow depth of field, pristine smooth materials. "
-        "Playful, heartwarming, fun for kids. "
+        "High-quality stylized 3D CGI animated fantasy creature. "
+        "Clearly NON-HUMAN, creature-like anatomy, exaggerated proportions. "
+        "Soft rounded shapes, expressive face, child-friendly design. "
+        "Pixar-style lighting, soft global illumination, subtle rim light, "
+        "volumetric soft shadows, cinematic depth of field. "
+        "Vibrant but harmonious colors. "
+        "Full body visible, centered composition. "
+        "No realistic human anatomy. "
         + style_text
     )
 
     negative_text = (
-        "outline, wires, strings, scribbles, tangled lines, photoreal, film grain, "
-        "watermark, signature, busy background, creepy, nude, human, adult human, "
-        "young human kids, genitals, floating head, spherical body, ball-shaped character, "
-        "blob creature, abstract form, chibi proportions, floating limbs"
+        "realistic human anatomy, human proportions, human superhero, "
+        "adult human, realistic muscles, six pack, human face, "
+        "marvel style, dc comics style, spiderman, batman, superman, "
+        "photorealistic, film grain, watermark, signature, "
+        "outline, scribbles, tangled lines, messy sketch, "
+        "creepy, horror, dark horror style, "
+        "floating head, dismembered limbs, "
+        "hyper-detailed skin pores, realistic skin texture"
     )
 
     P = {
