@@ -129,43 +129,112 @@ def build_workflow(style_key: str, seed: Optional[int]):
         "blob creature, abstract form, chibi proportions, floating limbs"
     )
 
-    return {
-    "1":  { class_type:"CheckpointLoaderSimple", inputs:{ ckpt_name:"Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors" } },
-    "2":  { class_type:"VAELoader",             inputs:{ vae_name:"sdxl_vae.safetensors" } },
-
-    "3":  { class_type:"CLIPTextEncode", inputs:{ text: positiveText, clip:["1",1] } },
-    "4":  { class_type:"CLIPTextEncode", inputs:{
-      text:"outline, wires, strings, scribbles, tangled lines, photoreal, film grain, watermark, signature, busy background, creepy, nude, human, adult human, young human kids, genitals, floating head, spherical body, ball-shaped character, blob creature, abstract form, chibi proportions, floating limbs",
-      clip:["1",1]
-    }},
-
-    "6":  { class_type:"ControlNetLoader", inputs:{ control_net_name:"controlnet-depth-sdxl-1.0.safetensors" } },
-    "7":  { class_type:"LoadImage",       inputs:{ image: uploadedSketchName } },
-
-    "9":  { class_type:"ControlNetApply", inputs:{
-      conditioning:["3",0], control_net:["6",0], image:["7",0],
-      strength:0.55, guidance_start:0.00, guidance_end:0.95
-    }},
-
-    "10": { class_type:"LoraLoader", inputs:{
-      model:["1",0], clip:["1",1],
-      lora_name:"realcartoon3d_v17.safetensors",
-      strength_model:0.40, strength_clip:0.40
-    }},
-
-    "11": { class_type:"EmptyLatentImage", inputs:{ width:896, height:896, batch_size:1 } },
-
-    "12": { class_type:"KSampler", inputs:{
-      model:["10",0], positive:["9",0], negative:["4",0],
-      seed:(window.sketchSeed >>> 0) || 123456789,
-      steps:32, cfg:3.3, sampler_name:"dpmpp_2m_sde", scheduler:"karras",
-      denoise:1.0, latent_image:["11",0]
-    }},
-
-    "13": { class_type:"VAEDecode",    inputs:{ samples:["12",0], vae:["2",0] } },
-    "15": { class_type:"PreviewImage", inputs:{ images:["13",0], every_n_steps:3, filename_prefix:"galax_preview" } },
-    "14": { class_type:"SaveImage",    inputs:{ images:["13",0], filename_prefix:"galax_depth_only" } }
-  }
+    P = {
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+            }
+        },
+        "2": {
+            "class_type": "VAELoader",
+            "inputs": {
+                "vae_name": "sdxl_vae.safetensors"
+            }
+        },
+        "3": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": positive_text,
+                "clip": ["1", 1]
+            }
+        },
+        "4": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": negative_text,
+                "clip": ["1", 1]
+            }
+        },
+        "6": {
+            "class_type": "ControlNetLoader",
+            "inputs": {
+                "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
+            }
+        },
+        "7": {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": uploaded_name
+            }
+        },
+        "9": {
+            "class_type": "ControlNetApply",
+            "inputs": {
+                "conditioning": ["3", 0],
+                "control_net": ["6", 0],
+                "image": ["7", 0],
+                "strength": 0.55,
+                "guidance_start": 0.00,
+                "guidance_end": 0.95
+            }
+        },
+        "10": {
+            "class_type": "LoraLoader",
+            "inputs": {
+                "model": ["1", 0],
+                "clip": ["1", 1],
+                "lora_name": "realcartoon3d_v17.safetensors",
+                "strength_model": 0.40,
+                "strength_clip": 0.40
+            }
+        },
+        "11": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {
+                "width": 896,
+                "height": 896,
+                "batch_size": 1
+            }
+        },
+        "12": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["10", 0],
+                "positive": ["9", 0],
+                "negative": ["4", 0],
+                "seed": int(seed or 123456789),
+                "steps": 32,
+                "cfg": 3.3,
+                "sampler_name": "dpmpp_2m_sde",
+                "scheduler": "karras",
+                "denoise": 1.0,
+                "latent_image": ["11", 0]
+            }
+        },
+        "13": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["12", 0],
+                "vae": ["2", 0]
+            }
+        },
+        "15": {
+            "class_type": "PreviewImage",
+            "inputs": {
+                "images": ["13", 0],
+                "every_n_steps": 3,
+                "filename_prefix": "galax_preview"
+            }
+        },
+        "14": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "images": ["13", 0],
+                "filename_prefix": "galax_depth_only"
+            }
+        }
+    }
 
 # =====================================================
 # GPU GENERATION
