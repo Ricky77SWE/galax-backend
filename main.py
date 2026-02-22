@@ -38,6 +38,7 @@ app.add_middleware(
 class GenerateRequest(BaseModel):
     styleKey: str
     seed: Optional[int] = None
+    image_base64: str
     mode: Optional[str] = None
     clientId: Optional[str] = None
 
@@ -81,24 +82,20 @@ GALAX_DESCRIPTIONS = {
 
 def upload_to_comfy(base_url, image_base64):
 
-    # Om prefix finns, ta bort det
-    if "," in image_base64:
-        image_base64 = image_base64.split(",", 1)[1]
-
-    image_bytes = base64.b64decode(image_base64)
+    image_bytes = base64.b64decode(image_base64.split(",")[1])
 
     files = {
         "image": ("upload.png", image_bytes, "image/png")
     }
 
-    response = requests.post(
+    r = requests.post(
         f"{base_url}/upload/image",
         files=files,
         timeout=GPU_TIMEOUT
     )
 
-    response.raise_for_status()
-    data = response.json()
+    r.raise_for_status()
+    data = r.json()
 
     if "name" not in data:
         raise Exception("Upload failed")
@@ -132,60 +129,83 @@ def build_workflow(style_key: str, seed: Optional[int]):
         "blob creature, abstract form, chibi proportions, floating limbs"
     )
 
+def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
+
+    style_text = GALAX_DESCRIPTIONS.get(style_key, "")
+    seed = seed or random.randint(1, 999999999)
+
+    positive_text = (
+        "Cute, friendly, 3D CGI children movie single superhero-creature "
+        "that matches the drawing's shape and colors. "
+        "Soft studio lighting, volumetric soft shadows, shallow depth of field. "
+        + style_text
+    )
+
+    negative_text = (
+        "outline, scribbles, watermark, signature, creepy, nude, human, "
+        "floating head, spherical body, blob creature"
+    )
+
     return {
-        "1": {
-            "class_type": "CheckpointLoaderSimple",
-            "inputs": {"ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"}
-        },
-        "2": {
-            "class_type": "VAELoader",
-            "inputs": {"vae_name": "sdxl_vae.safetensors"}
-        },
-        "3": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"text": positive_text, "clip": ["1", 1]}
-        },
-        "4": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"text": negative_text, "clip": ["1", 1]}
-        },
-        "10": {
-            "class_type": "LoraLoader",
-            "inputs": {
-                "model": ["1", 0],
-                "clip": ["1", 1],
-                "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.40,
-                "strength_clip": 0.40
-            }
-        },
-        "11": {
-            "class_type": "EmptyLatentImage",
-            "inputs": {"width": 896, "height": 896, "batch_size": 1}
-        },
-        "12": {
-            "class_type": "KSampler",
-            "inputs": {
-                "model": ["10", 0],
-                "positive": ["3", 0],   # ← viktigt!
-                "negative": ["4", 0],
-                "seed": seed,
-                "steps": 32,
-                "cfg": 3.3,
-                "sampler_name": "dpmpp_2m_sde",
-                "scheduler": "karras",
-                "denoise": 1.0,
-                "latent_image": ["11", 0]
-            }
-        },
-        "13": {
-            "class_type": "VAEDecode",
-            "inputs": {"samples": ["12", 0], "vae": ["2", 0]}
-        },
-        "14": {
-            "class_type": "SaveImage",
-            "inputs": {"images": ["13", 0], "filename_prefix": "galax_depth_only"}
-        }
+        "1": {"class_type": "CheckpointLoaderSimple",
+              "inputs": {"ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"}},
+
+        "2": {"class_type": "VAELoader",
+              "inputs": {"vae_name": "sdxl_vae.safetensors"}},
+
+        "3": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": positive_text, "clip": ["1", 1]}},
+
+        "4": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": negative_text, "clip": ["1", 1]}},
+
+        "6": {"class_type": "ControlNetLoader",
+              "inputs": {"control_net_name": "controlnet-depth-sdxl-1.0.safetensors"}},
+
+        "7": {"class_type": "LoadImage",
+              "inputs": {"image": uploaded_name}},
+
+        "9": {"class_type": "ControlNetApply",
+              "inputs": {
+                  "conditioning": ["3", 0],
+                  "control_net": ["6", 0],
+                  "image": ["7", 0],
+                  "strength": 0.55,
+                  "guidance_start": 0.0,
+                  "guidance_end": 0.95
+              }},
+
+        "10": {"class_type": "LoraLoader",
+               "inputs": {
+                   "model": ["1", 0],
+                   "clip": ["1", 1],
+                   "lora_name": "realcartoon3d_v17.safetensors",
+                   "strength_model": 0.40,
+                   "strength_clip": 0.40
+               }},
+
+        "11": {"class_type": "EmptyLatentImage",
+               "inputs": {"width": 896, "height": 896, "batch_size": 1}},
+
+        "12": {"class_type": "KSampler",
+               "inputs": {
+                   "model": ["10", 0],
+                   "positive": ["9", 0],   # 🔥 viktigt
+                   "negative": ["4", 0],
+                   "seed": seed,
+                   "steps": 32,
+                   "cfg": 3.3,
+                   "sampler_name": "dpmpp_2m_sde",
+                   "scheduler": "karras",
+                   "denoise": 1.0,
+                   "latent_image": ["11", 0]
+               }},
+
+        "13": {"class_type": "VAEDecode",
+               "inputs": {"samples": ["12", 0], "vae": ["2", 0]}},
+
+        "14": {"class_type": "SaveImage",
+               "inputs": {"images": ["13", 0], "filename_prefix": "galax_depth_only"}}
     }
 
 # =====================================================
@@ -214,67 +234,34 @@ from fastapi import Request
 from pydantic import ValidationError
 
 @app.post("/generate")
-async def generate(request: Request):
-
-    print("========== /generate CALLED ==========")
-
-    try:
-        body = await request.json()
-        print("RAW BODY:", body)
-
-        parsed = GenerateRequest(**body)
-
-        print("Parsed:")
-        print("  styleKey:", parsed.styleKey)
-        print("  seed:", parsed.seed)
-        print("  mode:", parsed.mode)
-        print("  clientId:", parsed.clientId)
-
-    except ValidationError as ve:
-        print("❌ VALIDATION ERROR:", ve)
-        return {"status": "ERROR", "error": "Invalid request format"}
-
-    except Exception as e:
-        print("❌ BODY PARSE ERROR:", e)
-        return {"status": "ERROR", "error": "Bad JSON"}
-
-    styleKey = parsed.styleKey
-    seed = parsed.seed
+async def generate(request: GenerateRequest):
 
     global ACTIVE_GPU
     global DEAD_GPUS
 
-    # 🔥 prioritera fungerande GPU
-    if ACTIVE_GPU:
-        endpoints = [ACTIVE_GPU] + [
-            e for e in GPU_ENDPOINTS
-            if e != ACTIVE_GPU and e not in DEAD_GPUS
-        ]
-    else:
-        endpoints = [e for e in GPU_ENDPOINTS if e not in DEAD_GPUS]
+    print("========== /generate ==========")
+    print("style:", request.styleKey)
 
-    for endpoint in endpoints:
+    for endpoint in GPU_ENDPOINTS:
 
         base = endpoint.rstrip("/")
         print("🔄 Trying:", base)
 
-        if base in DEAD_GPUS:
-            continue
-
         try:
             if not wait_for_gpu(base):
-                DEAD_GPUS.add(base)
                 continue
 
-            # 🔥 INGEN upload längre
-            workflow = build_workflow(styleKey, seed)
+            uploaded_name = upload_to_comfy(base, request.image_base64)
+
+            workflow = build_workflow(
+                request.styleKey,
+                request.seed,
+                uploaded_name
+            )
 
             r = requests.post(
                 f"{base}/prompt",
-                json={
-                    "prompt": workflow,
-                    "client_id": "galax-backend"
-                },
+                json={"prompt": workflow, "client_id": "galax-backend"},
                 timeout=GPU_TIMEOUT
             )
 
@@ -308,34 +295,21 @@ async def generate(request: Request):
                             f"type={image_meta.get('type','output')}"
                         )
 
-                        img_resp = requests.get(view_url, timeout=20)
-                        img_resp.raise_for_status()
-
-                        image_base64 = base64.b64encode(
-                            img_resp.content
-                        ).decode()
-
-                        ACTIVE_GPU = base
-                        DEAD_GPUS.discard(base)
+                        img = requests.get(view_url, timeout=20).content
+                        img_b64 = base64.b64encode(img).decode()
 
                         print("🟢 GPU SUCCESS")
 
                         return {
                             "status": "READY",
                             "source": base,
-                            "image": f"data:image/png;base64,{image_base64}"
+                            "image": f"data:image/png;base64,{img_b64}"
                         }
-
-            print("⚠️ GPU timeout")
-            DEAD_GPUS.add(base)
 
         except Exception as e:
             print("❌ GPU error:", e)
-            DEAD_GPUS.add(base)
 
-    ACTIVE_GPU = None
-
-    print("⚠️ All GPUs failed → fallback")
+    print("⚠ All GPUs failed → fallback")
 
     return {
         "status": "READY",
