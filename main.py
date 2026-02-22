@@ -203,7 +203,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     negative_text = (
         "realistic human, realistic anatomy, nude, naked, nipples, genitalia, "
         "photorealistic, horror, creepy, glitch, distorted body, "
-        "broken anatomy, extra limbs, melted body"
+        "broken anatomy, extra limbs, melted body, outlines, wires"
     )
 
     P = {
@@ -281,8 +281,8 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "positive": ["9", 0],
                 "negative": ["4", 0],
                 "seed": int(seed or 123456789),
-                "steps": 28,
-                "cfg": 3.2,
+                "steps": 32,
+                "cfg": 3.4,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
                 "denoise": 1.0,
