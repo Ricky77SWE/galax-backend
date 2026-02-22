@@ -107,7 +107,7 @@ def upload_to_comfy(base_url, image_base64):
 # WORKFLOW (1:1 från draw.js)
 # =====================================================
 
-def build_workflow(style_key: str, seed: Optional[int]):
+def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
 
     style_text = GALAX_DESCRIPTIONS.get(style_key, "")
     seed = seed or random.randint(1, 999999999)
