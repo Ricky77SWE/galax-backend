@@ -80,8 +80,12 @@ GALAX_DESCRIPTIONS = {
 # =====================================================
 
 def upload_to_comfy(base_url, image_base64):
-    header, encoded = image_base64.split(",", 1)
-    image_bytes = base64.b64decode(encoded)
+
+    # Om prefix finns, ta bort det
+    if "," in image_base64:
+        image_base64 = image_base64.split(",", 1)[1]
+
+    image_bytes = base64.b64decode(image_base64)
 
     files = {
         "image": ("upload.png", image_bytes, "image/png")
@@ -225,9 +229,6 @@ def wait_for_gpu(base_url, max_wait=10):
     print("🔴 GPU failed to wake")
     return False
     
-ACTIVE_GPU = None
-DEAD_GPUS = set()
-
 @app.post("/generate")
 def generate(request: GenerateRequest):
 
@@ -261,7 +262,7 @@ def generate(request: GenerateRequest):
 
             # 2️⃣ bygg workflow
             workflow = build_workflow(
-                request.prompt,
+                request.styleKey,
                 request.seed,
                 uploaded_name
             )
@@ -335,8 +336,9 @@ def generate(request: GenerateRequest):
     ACTIVE_GPU = None
 
     return {
-        "status": "ERROR",
-        "error": "All GPUs failed"
+        "status": "READY",
+        "source": "fallback",
+        "image": next(fallback_cycle)
     }
     
 # =====================================================
