@@ -291,7 +291,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "cfg": 3.2,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
-                "denoise": 0.6,
+                "denoise": 0.8,
                 "latent_image": ["11", 0]
             }
         },
@@ -454,8 +454,43 @@ FALLBACK_IMAGES = [
     for i in range(1, 15)
 ]
 
-fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
+fallback_img = next(fallback_cycle)
 
+if not fallback_img.startswith("data:"):
+    fallback_img = f"data:image/png;base64,{fallback_img}"
+
+return {
+    "ok": True,
+    "source": "fallback",
+    "image": fallback_img
+}
+
+# =====================================================
+# SAFETY
+# =====================================================
+
+print("⚠ All GPUs failed → fallback")
+
+try:
+    fallback_img = next(fallback_cycle)
+
+    if not fallback_img.startswith("data:"):
+        fallback_img = f"data:image/png;base64,{fallback_img}"
+
+    return {
+        "ok": True,
+        "source": "fallback",
+        "image": fallback_img
+    }
+
+except Exception as e:
+    print("💀 FALLBACK FAILED:", e)
+
+    return {
+        "ok": True,
+        "source": "emergency",
+        "image": None
+    }
 # =====================================================
 # STATUS CHECK
 # =====================================================
@@ -463,3 +498,4 @@ fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
