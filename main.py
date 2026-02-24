@@ -8,6 +8,12 @@ import os
 import random
 import time
 import base64
+import signal
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Request timed out")
+
+signal.signal(signal.SIGALRM, timeout_handler)
 
 app = FastAPI()
 
@@ -188,7 +194,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     seed = seed or random.randint(1, 999999999)
 
     positive_text = (
-        "High-quality stylized 3D animated fantasy creature. "
+        "High-quality stylized 3D animated cute fantasy creature. "
         "Inspired by the original drawing shape and colors. "
         "Keep overall silhouette similar but allow creative refinement. "
         "Preserve dominant colors from the drawing. "
@@ -251,7 +257,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.55,
+                "strength": 0.45,
                 "guidance_start": 0.00,
                 "guidance_end": 0.95
             }
@@ -281,11 +287,11 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "positive": ["9", 0],
                 "negative": ["4", 0],
                 "seed": int(seed or 123456789),
-                "steps": 32,
-                "cfg": 3.4,
+                "steps": 28,
+                "cfg": 3.2,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
-                "denoise": 1.0,
+                "denoise": 0.6,
                 "latent_image": ["11", 0]
             }
         },
@@ -343,9 +349,6 @@ from pydantic import ValidationError
 @app.post("/generate")
 async def generate(request: GenerateRequest):
 
-    global ACTIVE_GPU
-    global DEAD_GPUS
-
     print("========== /generate ==========")
     print("style:", request.styleKey)
 
@@ -369,7 +372,7 @@ async def generate(request: GenerateRequest):
             r = requests.post(
                 f"{base}/prompt",
                 json={"prompt": workflow, "client_id": "galax-backend"},
-                timeout=GPU_TIMEOUT
+                timeout=60
             )
 
             r.raise_for_status()
@@ -382,21 +385,20 @@ async def generate(request: GenerateRequest):
 
                 h = requests.get(
                     f"{base}/history/{prompt_id}",
-                    timeout=10
+                    timeout=20
                 )
 
                 if h.status_code != 200:
                     continue
 
-                data = h.json()
                 history_data = h.json()
 
                 if prompt_id not in history_data:
                     continue
 
-                prompt_outputs = history_data[prompt_id].get("outputs", {})
+                outputs = history_data[prompt_id].get("outputs", {})
 
-                for node_id, node_data in prompt_outputs.items():
+                for node_id, node_data in outputs.items():
                     if "images" in node_data and len(node_data["images"]) > 0:
 
                         image_meta = node_data["images"][0]
@@ -408,48 +410,40 @@ async def generate(request: GenerateRequest):
                             f"type={image_meta.get('type','output')}"
                         )
 
-                        img_resp = requests.get(view_url, timeout=20)
+                        img_resp = requests.get(view_url, timeout=30)
                         img_resp.raise_for_status()
 
                         image_base64 = base64.b64encode(img_resp.content).decode()
 
-                        print("🟢 IMAGE FOUND in node:", node_id)
-
-                        return {
-                            "status": "READY",
-                            "source": base,
-                            "image": f"data:image/png;base64,{image_base64}"
-                        }
-                        image_meta = node["images"][0]
-
-                        view_url = (
-                            f"{base}/view?"
-                            f"filename={image_meta['filename']}&"
-                            f"subfolder={image_meta.get('subfolder','')}&"
-                            f"type={image_meta.get('type','output')}"
-                        )
-
-                        img = requests.get(view_url, timeout=20).content
-                        img_b64 = base64.b64encode(img).decode()
-
                         print("🟢 GPU SUCCESS")
 
                         return {
-                            "status": "READY",
+                            "ok": True,
                             "source": base,
-                            "image": f"data:image/png;base64,{img_b64}"
+                            "image": f"data:image/png;base64,{image_base64}"
                         }
 
         except Exception as e:
             print("❌ GPU error:", e)
+            continue
 
+    # 🔥 Om alla GPU misslyckas
     print("⚠ All GPUs failed → fallback")
 
-    return {
-        "status": "READY",
-        "source": "fallback",
-        "image": next(fallback_cycle)
-    }
+    try:
+        fallback_img = next(fallback_cycle)
+        return {
+            "ok": True,
+            "source": "fallback",
+            "image": fallback_img
+        }
+    except Exception as e:
+        print("💀 FALLBACK FAILED:", e)
+        return {
+            "ok": True,
+            "source": "emergency",
+            "image": None
+        }
     
 # =====================================================
 # FALLBACK IMAGES
