@@ -278,9 +278,9 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.65,
+                "strength": 0.70,
                 "guidance_start": 0.00,
-                "guidance_end": 0.95
+                "guidance_end": 0.90
             }
         },
         "10": {
@@ -309,10 +309,10 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "negative": ["4", 0],
                 "seed": int(seed or 123456789),
                 "steps": 28,
-                "cfg": 3.2,
+                "cfg": 4.0,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
-                "denoise": 0.8,
+                "denoise": 0.7,
                 "latent_image": ["11", 0]
             }
         },
