@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+lo from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -350,7 +350,11 @@ from pydantic import ValidationError
 async def generate(request: GenerateRequest):
 
     print("========== /generate ==========")
-    print("style:", request.styleKey)
+    print("Style:", request.styleKey)
+
+    # -------------------------------------------------
+    # TRY GPU
+    # -------------------------------------------------
 
     for endpoint in GPU_ENDPOINTS:
 
@@ -381,6 +385,7 @@ async def generate(request: GenerateRequest):
             start_time = time.time()
 
             while time.time() - start_time < MAX_POLL_SECONDS:
+
                 time.sleep(POLL_INTERVAL)
 
                 h = requests.get(
@@ -397,48 +402,59 @@ async def generate(request: GenerateRequest):
                     continue
 
                 outputs = history_data[prompt_id].get("outputs", {})
+                save_node = outputs.get("14")
 
-                for node_id, node_data in outputs.items():
-                    if "images" in node_data and len(node_data["images"]) > 0:
+                if save_node and "images" in save_node and save_node["images"]:
 
-                        image_meta = node_data["images"][0]
+                    image_meta = save_node["images"][0]
 
-                        view_url = (
-                            f"{base}/view?"
-                            f"filename={image_meta['filename']}&"
-                            f"subfolder={image_meta.get('subfolder','')}&"
-                            f"type={image_meta.get('type','output')}"
-                        )
+                    view_url = (
+                        f"{base}/view?"
+                        f"filename={image_meta['filename']}&"
+                        f"subfolder={image_meta.get('subfolder','')}&"
+                        f"type={image_meta.get('type','output')}"
+                    )
 
-                        img_resp = requests.get(view_url, timeout=30)
-                        img_resp.raise_for_status()
+                    img_resp = requests.get(view_url, timeout=30)
+                    img_resp.raise_for_status()
 
-                        image_base64 = base64.b64encode(img_resp.content).decode()
+                    image_base64 = base64.b64encode(img_resp.content).decode()
 
-                        print("🟢 GPU SUCCESS")
+                    print("🟢 GPU SUCCESS")
 
-                        return {
-                            "ok": True,
-                            "source": base,
-                            "image": f"data:image/png;base64,{image_base64}"
-                        }
+                    return {
+                        "ok": True,
+                        "source": base,
+                        "image": f"data:image/png;base64,{image_base64}"
+                    }
 
         except Exception as e:
             print("❌ GPU error:", e)
             continue
 
-    # 🔥 Om alla GPU misslyckas
+    # -------------------------------------------------
+    # FALLBACK (ALWAYS SAFE)
+    # -------------------------------------------------
+
     print("⚠ All GPUs failed → fallback")
 
     try:
-        fallback_img = next(fallback_cycle)
+        img_url = next(fallback_cycle)
+
+        r = requests.get(img_url, timeout=10)
+        r.raise_for_status()
+
+        image_base64 = base64.b64encode(r.content).decode()
+
         return {
             "ok": True,
             "source": "fallback",
-            "image": fallback_img
+            "image": f"data:image/png;base64,{image_base64}"
         }
+
     except Exception as e:
         print("💀 FALLBACK FAILED:", e)
+
         return {
             "ok": True,
             "source": "emergency",
