@@ -278,9 +278,9 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.70,
+                "strength": 0.50,
                 "guidance_start": 0.00,
-                "guidance_end": 0.90
+                "guidance_end": 0.95
             }
         },
         "10": {
@@ -289,7 +289,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "model": ["1", 0],
                 "clip": ["1", 1],
                 "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.40,
+                "strength_model": 0.35,
                 "strength_clip": 0.40
             }
         },
@@ -309,10 +309,10 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "negative": ["4", 0],
                 "seed": int(seed or 123456789),
                 "steps": 28,
-                "cfg": 4.0,
+                "cfg": 3.4,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
-                "denoise": 0.7,
+                "denoise": 0.85,
                 "latent_image": ["11", 0]
             }
         },
