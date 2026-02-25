@@ -454,43 +454,8 @@ FALLBACK_IMAGES = [
     for i in range(1, 15)
 ]
 
-fallback_img = next(fallback_cycle)
+fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
 
-if not fallback_img.startswith("data:"):
-    fallback_img = f"data:image/png;base64,{fallback_img}"
-
-return {
-    "ok": True,
-    "source": "fallback",
-    "image": fallback_img
-}
-
-# =====================================================
-# SAFETY
-# =====================================================
-
-print("⚠ All GPUs failed → fallback")
-
-try:
-    fallback_img = next(fallback_cycle)
-
-    if not fallback_img.startswith("data:"):
-        fallback_img = f"data:image/png;base64,{fallback_img}"
-
-    return {
-        "ok": True,
-        "source": "fallback",
-        "image": fallback_img
-    }
-
-except Exception as e:
-    print("💀 FALLBACK FAILED:", e)
-
-    return {
-        "ok": True,
-        "source": "emergency",
-        "image": None
-    }
 # =====================================================
 # STATUS CHECK
 # =====================================================
