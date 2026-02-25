@@ -10,6 +10,10 @@ import time
 import base64
 import signal
 
+# =====================================================
+# TIMEOUT SAFETY
+# =====================================================
+
 def timeout_handler(signum, frame):
     raise TimeoutError("Request timed out")
 
@@ -63,6 +67,25 @@ POLL_INTERVAL = 1
 MAX_POLL_SECONDS = 90
 
 # =====================================================
+# FALLBACK IMAGES
+# =====================================================
+
+FALLBACK_IMAGES = [
+    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/02/hero_{i:02d}.png"
+    for i in range(1, 15)
+]
+
+fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
+
+# =====================================================
+# UTIL
+# =====================================================
+
+def to_data_url(image_bytes: bytes) -> str:
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
+    
+# =====================================================
 # GPU STATE CACHE
 # =====================================================
 
@@ -106,43 +129,38 @@ POSE_VARIATIONS = [
 ]
 
 BACKGROUND_VARIATIONS = [
-    "soft magical forest background",
+    "soft magical pink background",
     "colorful sky background",
     "simple gradient background",
-    "soft glowing fantasy environment",
-    "subtle playful background"
+    "soft glowing fantasy rainbow environment",
+    "subtle playful light gren background"
 ]
 
 GALAX_DESCRIPTIONS = {
 
     "blobbis": (
-        "Small plush creature with compact rounded body. "
+        "Small cute plush animal with compact rounded body. "
         "Clear readable silhouette. Cute friendly expression."
     ),
 
     "kramis": (
-        "Large friendly creature with big body and strong soft presence. "
-        "Rounded silhouette. Gentle smiling eyes."
+        "Large friendly creature with big soft body and Gentle smiling eyes."
     ),
 
     "plupp": (
-        "Small magical glowing creature with light delicate body. "
-        "Clear fantasy silhouette. Cheerful personality."
+        "Small magical glowing creature. Cheerful personality."
     ),
 
     "snurroga": (
         "Colorful playful fantasy creature with expressive face. "
-        "Distinct silhouette and joyful presence."
     ),
 
     "sticky": (
-        "Agile fantasy creature superhero with dynamic pose. "
-        "Flexible cartoon creature anatomy."
+        "Agile fantasy creature with dynamic pose. Flexible cartoon anatomy."
     ),
 
     "wille": (
-        "Tiny baby fantasy creature with oversized head and small body. "
-        "Innocent joyful expression."
+        "Tiny cure, happy baby fantasy animal creature with oversized head and small body. "
     )
 }
 
@@ -152,7 +170,10 @@ GALAX_DESCRIPTIONS = {
 
 def upload_to_comfy(base_url, image_base64):
 
-    image_bytes = base64.b64decode(image_base64.split(",")[1])
+    if "," in image_base64:
+        image_base64 = image_base64.split(",")[1]
+
+    image_bytes = base64.b64decode(image_base64)
 
     files = {
         "image": ("upload.png", image_bytes, "image/png")
@@ -326,25 +347,20 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
 # =====================================================
 
 def wait_for_gpu(base_url, max_wait=10):
-    print("⏳ Waiting for GPU to wake...")
     start = time.time()
-
     while time.time() - start < max_wait:
         try:
             r = requests.get(f"{base_url}/system_stats", timeout=5)
             if r.status_code == 200:
-                print("🟢 GPU awake")
                 return True
         except:
             pass
-
         time.sleep(2)
-
-    print("🔴 GPU failed to wake")
     return False
 
-from fastapi import Request
-from pydantic import ValidationError
+# =====================================================
+# MAIN ENDPOINT
+# =====================================================
 
 @app.post("/generate")
 async def generate(request: GenerateRequest):
@@ -352,14 +368,14 @@ async def generate(request: GenerateRequest):
     print("========== /generate ==========")
     print("Style:", request.styleKey)
 
-    # -------------------------------------------------
+    # ----------------------------------------
     # TRY GPU
-    # -------------------------------------------------
+    # ----------------------------------------
 
     for endpoint in GPU_ENDPOINTS:
 
         base = endpoint.rstrip("/")
-        print("🔄 Trying:", base)
+        print("Trying GPU:", base)
 
         try:
             if not wait_for_gpu(base):
@@ -418,25 +434,22 @@ async def generate(request: GenerateRequest):
                     img_resp = requests.get(view_url, timeout=30)
                     img_resp.raise_for_status()
 
-                    image_base64 = base64.b64encode(img_resp.content).decode()
-
-                    print("🟢 GPU SUCCESS")
+                    print("GPU SUCCESS")
 
                     return {
-                        "ok": True,
-                        "source": base,
-                        "image": f"data:image/png;base64,{image_base64}"
+                        "status": "READY",
+                        "image": to_data_url(img_resp.content)
                     }
 
         except Exception as e:
-            print("❌ GPU error:", e)
+            print("GPU error:", e)
             continue
-
+    
     # -------------------------------------------------
     # FALLBACK (ALWAYS SAFE)
     # -------------------------------------------------
 
-    print("⚠ All GPUs failed → fallback")
+    print("All GPUs failed → fallback")
 
     try:
         img_url = next(fallback_cycle)
@@ -444,33 +457,24 @@ async def generate(request: GenerateRequest):
         r = requests.get(img_url, timeout=10)
         r.raise_for_status()
 
-        image_base64 = base64.b64encode(r.content).decode()
-
         return {
-            "ok": True,
-            "source": "fallback",
-            "image": f"data:image/png;base64,{image_base64}"
+            "status": "READY",
+            "image": to_data_url(r.content)
         }
 
     except Exception as e:
-        print("💀 FALLBACK FAILED:", e)
+        print("Fallback failed:", e)
+
+        # Emergency blank image
+        blank = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAsTAAALEwEAmpwYAAA"
+            "AAXNSR0IArs4c6QAAABxpRE9UAAAAAgAAAAAAAAABAAAAKAAAACgAAAABAAAABAAAACgAAAAB"
+        )
 
         return {
-            "ok": True,
-            "source": "emergency",
-            "image": None
+            "status": "READY",
+            "image": to_data_url(blank)
         }
-    
-# =====================================================
-# FALLBACK IMAGES
-# =====================================================
-
-FALLBACK_IMAGES = [
-    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/02/hero_{i:02d}.png"
-    for i in range(1, 15)
-]
-
-fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
 
 # =====================================================
 # STATUS CHECK
