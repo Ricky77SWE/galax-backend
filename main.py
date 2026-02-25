@@ -476,17 +476,29 @@ def run_gpu_job(endpoint, request):
 
 def try_all_gpus_parallel(request):
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(GPU_ENDPOINTS)) as executor:
+
         futures = [
-            executor.submit(run_gpu_job, gpu, request)
-            for gpu in GPU_ENDPOINTS
+            executor.submit(try_single_gpu, endpoint, request)
+            for endpoint in GPU_ENDPOINTS
         ]
 
-        for future in concurrent.futures.as_completed(futures, timeout=MAX_TOTAL_TIME):
-            result = future.result()
-            if result:
-                return result
+        for future in concurrent.futures.as_completed(futures):
 
+            try:
+                result = future.result()
+
+                if result:
+                    print("🟢 First GPU returned result")
+                    return result
+
+            except Exception as e:
+                print("❌ GPU future failed:", e)
+
+    # Om ingen GPU gav bild
+    print("⚠ No GPU returned image")
     return None
 
 # ==========================================
@@ -499,37 +511,39 @@ async def generate(request: GenerateRequest):
     print("========== /generate ==========")
     print("Style:", request.styleKey)
 
-    # 🚀 PARALLELL GPU TEST
     image_data_url = try_all_gpus_parallel(request)
 
     if image_data_url:
         return {
-            "status": "READY",
+            "ok": True,
+            "source": "gpu",
             "image": image_data_url
         }
 
-    # 🧯 FALLBACK DIRECT
-    print("⚠ GPU timeout → fallback")
+    # ---------- FALLBACK ----------
+    print("⚠ Using fallback")
 
     try:
         img_url = next(fallback_cycle)
+
         r = requests.get(img_url, timeout=5)
         r.raise_for_status()
 
+        b64 = base64.b64encode(r.content).decode()
+
         return {
-            "status": "READY",
-            "image": to_data_url(r.content)
+            "ok": True,
+            "source": "fallback",
+            "image": f"data:image/png;base64,{b64}"
         }
 
-    except:
-        # Emergency tiny transparent pixel
-        blank = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wIAAgMBApU7n3sAAAAASUVORK5CYII="
-        )
+    except Exception as e:
+        print("💀 FALLBACK FAILED:", e)
 
         return {
-            "status": "READY",
-            "image": to_data_url(blank)
+            "ok": True,
+            "source": "emergency",
+            "image": None
         }
     
     # -------------------------------------------------
