@@ -64,7 +64,7 @@ GPU_ENDPOINTS = [
 
 GPU_TIMEOUT = 30
 POLL_INTERVAL = 1
-MAX_POLL_SECONDS = 90
+MAX_POLL_SECONDS = 40
 
 # =====================================================
 # FALLBACK IMAGES
@@ -341,6 +341,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     }
     
     return P
+    
 import requests
 import time
 import base64
