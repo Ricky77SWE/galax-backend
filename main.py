@@ -216,7 +216,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
 
     positive_text = (
         "High-quality stylized 3D animated cute fantasy creature. "
-        "Inspired by the original drawing shape and colors. "
+        "STRICTLY preserve original silhouette, body proportions and limb placement. Do NOT modify the overall shape."
         "Keep overall silhouette similar but allow creative refinement. "
         "Preserve dominant colors from the drawing. "
         "Clearly NON-HUMAN creature. "
@@ -278,7 +278,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.45,
+                "strength": 0.65,
                 "guidance_start": 0.00,
                 "guidance_end": 0.95
             }
