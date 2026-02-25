@@ -341,87 +341,108 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     }
     
     return P
+import requests
+import time
+import base64
+import random
+import itertools
+import concurrent.futures
 
-# =====================================================
-# GPU GENERATION
-# =====================================================
+# ==========================================
+# PERFORMANCE CONFIG
+# ==========================================
 
-def wait_for_gpu(base_url, max_wait=10):
-    start = time.time()
-    while time.time() - start < max_wait:
-        try:
-            r = requests.get(f"{base_url}/system_stats", timeout=5)
-            if r.status_code == 200:
-                return True
-        except:
-            pass
-        time.sleep(2)
-    return False
+POLL_INTERVAL = 0.25          # 🔥 snabb polling
+MAX_TOTAL_TIME = 18           # 🔥 hård timeout (sekunder)
+GPU_CONNECT_TIMEOUT = 5
+GPU_READ_TIMEOUT = 15
 
-# =====================================================
-# MAIN ENDPOINT
-# =====================================================
+# ==========================================
+# UTIL
+# ==========================================
 
-@app.post("/generate")
-async def generate(request: GenerateRequest):
+def to_data_url(image_bytes: bytes) -> str:
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
 
-    print("========== /generate ==========")
-    print("Style:", request.styleKey)
+# ==========================================
+# FAST GPU EXECUTION (SINGLE GPU)
+# ==========================================
 
-    # ----------------------------------------
-    # TRY GPU
-    # ----------------------------------------
+def run_gpu_job(endpoint, request):
 
-    for endpoint in GPU_ENDPOINTS:
+    base = endpoint.rstrip("/")
 
-        base = endpoint.rstrip("/")
-        print("Trying GPU:", base)
+    try:
+        # 1️⃣ Wake test
+        r = requests.get(
+            f"{base}/system_stats",
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
+        if r.status_code != 200:
+            return None
 
-        try:
-            if not wait_for_gpu(base):
-                continue
+        # 2️⃣ Upload
+        image_base64 = request.image_base64
+        if "," in image_base64:
+            image_base64 = image_base64.split(",")[1]
 
-            uploaded_name = upload_to_comfy(base, request.image_base64)
+        image_bytes = base64.b64decode(image_base64)
 
-            workflow = build_workflow(
-                request.styleKey,
-                request.seed,
-                uploaded_name
-            )
+        files = {
+            "image": ("upload.png", image_bytes, "image/png")
+        }
 
-            r = requests.post(
-                f"{base}/prompt",
-                json={"prompt": workflow, "client_id": "galax-backend"},
-                timeout=60
-            )
+        r = requests.post(
+            f"{base}/upload/image",
+            files=files,
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
+        r.raise_for_status()
+        uploaded_name = r.json()["name"]
 
-            r.raise_for_status()
-            prompt_id = r.json()["prompt_id"]
+        # 3️⃣ Workflow
+        workflow = build_workflow(
+            request.styleKey,
+            request.seed,
+            uploaded_name
+        )
 
-            start_time = time.time()
+        r = requests.post(
+            f"{base}/prompt",
+            json={"prompt": workflow, "client_id": "galax"},
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
+        r.raise_for_status()
+        prompt_id = r.json()["prompt_id"]
 
-            while time.time() - start_time < MAX_POLL_SECONDS:
+        # 4️⃣ FAST POLLING LOOP
+        start = time.time()
 
-                time.sleep(POLL_INTERVAL)
+        while True:
 
+            if time.time() - start > MAX_TOTAL_TIME:
+                return None
+
+            time.sleep(POLL_INTERVAL)
+
+            try:
                 h = requests.get(
                     f"{base}/history/{prompt_id}",
-                    timeout=20
+                    timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
                 )
 
                 if h.status_code != 200:
                     continue
 
-                history_data = h.json()
-
-                if prompt_id not in history_data:
+                data = h.json()
+                if prompt_id not in data:
                     continue
 
-                outputs = history_data[prompt_id].get("outputs", {})
+                outputs = data[prompt_id].get("outputs", {})
                 save_node = outputs.get("14")
 
-                if save_node and "images" in save_node and save_node["images"]:
-
+                if save_node and save_node.get("images"):
                     image_meta = save_node["images"][0]
 
                     view_url = (
@@ -431,19 +452,85 @@ async def generate(request: GenerateRequest):
                         f"type={image_meta.get('type','output')}"
                     )
 
-                    img_resp = requests.get(view_url, timeout=30)
+                    img_resp = requests.get(
+                        view_url,
+                        timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+                    )
                     img_resp.raise_for_status()
 
-                    print("GPU SUCCESS")
+                    print("🟢 GPU SUCCESS:", base)
 
-                    return {
-                        "status": "READY",
-                        "image": to_data_url(img_resp.content)
-                    }
+                    return to_data_url(img_resp.content)
 
-        except Exception as e:
-            print("GPU error:", e)
-            continue
+            except:
+                continue
+
+    except:
+        return None
+
+    return None
+
+# ==========================================
+# PARALLEL GPU EXECUTION
+# ==========================================
+
+def try_all_gpus_parallel(request):
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [
+            executor.submit(run_gpu_job, gpu, request)
+            for gpu in GPU_ENDPOINTS
+        ]
+
+        for future in concurrent.futures.as_completed(futures, timeout=MAX_TOTAL_TIME):
+            result = future.result()
+            if result:
+                return result
+
+    return None
+
+# ==========================================
+# MAIN ENDPOINT
+# ==========================================
+
+@app.post("/generate")
+async def generate(request: GenerateRequest):
+
+    print("========== /generate ==========")
+    print("Style:", request.styleKey)
+
+    # 🚀 PARALLELL GPU TEST
+    image_data_url = try_all_gpus_parallel(request)
+
+    if image_data_url:
+        return {
+            "status": "READY",
+            "image": image_data_url
+        }
+
+    # 🧯 FALLBACK DIRECT
+    print("⚠ GPU timeout → fallback")
+
+    try:
+        img_url = next(fallback_cycle)
+        r = requests.get(img_url, timeout=5)
+        r.raise_for_status()
+
+        return {
+            "status": "READY",
+            "image": to_data_url(r.content)
+        }
+
+    except:
+        # Emergency tiny transparent pixel
+        blank = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wIAAgMBApU7n3sAAAAASUVORK5CYII="
+        )
+
+        return {
+            "status": "READY",
+            "image": to_data_url(blank)
+        }
     
     # -------------------------------------------------
     # FALLBACK (ALWAYS SAFE)
