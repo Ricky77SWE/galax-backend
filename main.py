@@ -368,6 +368,24 @@ def to_data_url(image_bytes: bytes) -> str:
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     return f"data:image/png;base64,{b64}"
 
+def wait_for_gpu(base_url, max_wait=8):
+    print("⏳ Waiting for GPU to wake...")
+    start = time.time()
+
+    while time.time() - start < max_wait:
+        try:
+            r = requests.get(f"{base_url}/system_stats", timeout=3)
+            if r.status_code == 200:
+                print("🟢 GPU awake")
+                return True
+        except:
+            pass
+
+        time.sleep(1)
+
+    print("🔴 GPU failed to wake")
+    return False
+    
 # ==========================================
 # FAST GPU EXECUTION (SINGLE GPU)
 # ==========================================
