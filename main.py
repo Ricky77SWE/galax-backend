@@ -10,6 +10,8 @@ import time
 import base64
 import signal
 
+LAST_WORKING_GPU = None
+
 # =====================================================
 # TIMEOUT SAFETY
 # =====================================================
@@ -472,61 +474,122 @@ def run_gpu_job(endpoint, request):
     return None
 
 # ==========================================
-# PARALLEL GPU EXECUTION
-# ==========================================
-
-def try_all_gpus_parallel(request):
-
-    import concurrent.futures
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(GPU_ENDPOINTS)) as executor:
-
-        futures = [
-            executor.submit(try_single_gpu, endpoint, request)
-            for endpoint in GPU_ENDPOINTS
-        ]
-
-        for future in concurrent.futures.as_completed(futures):
-
-            try:
-                result = future.result()
-
-                if result:
-                    print("🟢 First GPU returned result")
-                    return result
-
-            except Exception as e:
-                print("❌ GPU future failed:", e)
-
-    # Om ingen GPU gav bild
-    print("⚠ No GPU returned image")
-    return None
-
-# ==========================================
 # MAIN ENDPOINT
 # ==========================================
+
+LAST_WORKING_GPU = None
+
 
 @app.post("/generate")
 async def generate(request: GenerateRequest):
 
+    global LAST_WORKING_GPU
+
     print("========== /generate ==========")
     print("Style:", request.styleKey)
 
-    image_data_url = try_all_gpus_parallel(request)
+    # -------------------------------
+    # GPU order (favorite first)
+    # -------------------------------
 
-    if image_data_url:
-        return {
-            "ok": True,
-            "source": "gpu",
-            "image": image_data_url
-        }
+    endpoints = GPU_ENDPOINTS.copy()
 
-    # ---------- FALLBACK ----------
-    print("⚠ Using fallback")
+    if LAST_WORKING_GPU in endpoints:
+        endpoints.remove(LAST_WORKING_GPU)
+        endpoints.insert(0, LAST_WORKING_GPU)
+
+    print("GPU order:", endpoints)
+
+    # -------------------------------
+    # TRY GPUS
+    # -------------------------------
+
+    for base in endpoints:
+
+        print("Trying GPU:", base)
+
+        try:
+            if not wait_for_gpu(base):
+                continue
+
+            uploaded_name = upload_to_comfy(base, request.image_base64)
+
+            workflow = build_workflow(
+                request.styleKey,
+                request.seed,
+                uploaded_name
+            )
+
+            r = requests.post(
+                f"{base}/prompt",
+                json={"prompt": workflow, "client_id": "galax-backend"},
+                timeout=40
+            )
+
+            r.raise_for_status()
+            prompt_id = r.json()["prompt_id"]
+
+            start_time = time.time()
+
+            while time.time() - start_time < 35:
+
+                time.sleep(1)
+
+                h = requests.get(
+                    f"{base}/history/{prompt_id}",
+                    timeout=10
+                )
+
+                if h.status_code != 200:
+                    continue
+
+                history_data = h.json()
+
+                if prompt_id not in history_data:
+                    continue
+
+                outputs = history_data[prompt_id].get("outputs", {})
+                save_node = outputs.get("14")
+
+                if save_node and save_node.get("images"):
+
+                    image_meta = save_node["images"][0]
+
+                    view_url = (
+                        f"{base}/view?"
+                        f"filename={image_meta['filename']}&"
+                        f"subfolder={image_meta.get('subfolder','')}&"
+                        f"type={image_meta.get('type','output')}"
+                    )
+
+                    img_resp = requests.get(view_url, timeout=15)
+                    img_resp.raise_for_status()
+
+                    b64 = base64.b64encode(img_resp.content).decode()
+
+                    print("GPU SUCCESS")
+
+                    # 🔥 Spara vinnaren
+                    LAST_WORKING_GPU = base
+
+                    return {
+                        "ok": True,
+                        "source": base,
+                        "image": f"data:image/png;base64,{b64}"
+                    }
+
+        except Exception as e:
+            print("GPU failed:", e)
+            continue
+
+    # -------------------------------
+    # FALLBACK
+    # -------------------------------
+
+    print("Using fallback")
 
     try:
         img_url = next(fallback_cycle)
-
         r = requests.get(img_url, timeout=5)
         r.raise_for_status()
 
@@ -539,43 +602,12 @@ async def generate(request: GenerateRequest):
         }
 
     except Exception as e:
-        print("💀 FALLBACK FAILED:", e)
+        print("Fallback failed:", e)
 
         return {
             "ok": True,
             "source": "emergency",
             "image": None
-        }
-    
-    # -------------------------------------------------
-    # FALLBACK (ALWAYS SAFE)
-    # -------------------------------------------------
-
-    print("All GPUs failed → fallback")
-
-    try:
-        img_url = next(fallback_cycle)
-
-        r = requests.get(img_url, timeout=10)
-        r.raise_for_status()
-
-        return {
-            "status": "READY",
-            "image": to_data_url(r.content)
-        }
-
-    except Exception as e:
-        print("Fallback failed:", e)
-
-        # Emergency blank image
-        blank = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAsTAAALEwEAmpwYAAA"
-            "AAXNSR0IArs4c6QAAABxpRE9UAAAAAgAAAAAAAAABAAAAKAAAACgAAAABAAAABAAAACgAAAAB"
-        )
-
-        return {
-            "status": "READY",
-            "image": to_data_url(blank)
         }
 
 # =====================================================
