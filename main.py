@@ -7,7 +7,23 @@ import itertools
 import random
 import time
 import base64
+import hashlib
+import threading
 
+REQUEST_CACHE = {}
+IN_FLIGHT = set()
+CACHE_TTL = 60  # sekunder
+LOCK = threading.Lock()
+
+def build_fingerprint(request: GenerateRequest) -> str:
+
+    img_hash = hashlib.sha1(
+        request.image_base64.encode()
+    ).hexdigest()[:12]
+
+    raw = f"{request.styleKey}-{request.seed}-{img_hash}-{request.clientId}"
+    return hashlib.sha1(raw.encode()).hexdigest()
+    
 # =====================================================
 # APP INIT
 # =====================================================
@@ -277,14 +293,53 @@ async def generate(request: GenerateRequest):
 
     global LAST_WORKING_GPU
 
+    fingerprint = build_fingerprint(request)
+    now = time.time()
+
     print("========== /generate ==========")
-    print("Style:", request.styleKey)
+    print("Fingerprint:", fingerprint)
+
+    # ---------------------------------
+    # CACHE CHECK
+    # ---------------------------------
+
+    with LOCK:
+
+        # Om redan körs → blockera dubbel
+        if fingerprint in IN_FLIGHT:
+            print("⚠ Duplicate in-flight blocked")
+            return {
+                "ok": True,
+                "source": "duplicate_blocked",
+                "image": None
+            }
+
+        # Om nyligen färdig → returnera cached
+        if fingerprint in REQUEST_CACHE:
+            cached = REQUEST_CACHE[fingerprint]
+
+            if now - cached["time"] < CACHE_TTL:
+                print("⚡ Returning cached result")
+                return {
+                    "ok": True,
+                    "source": "cache",
+                    "image": cached["image"]
+                }
+
+        # Markera som aktiv
+        IN_FLIGHT.add(fingerprint)
+
+    # ---------------------------------
+    # GPU EXECUTION
+    # ---------------------------------
 
     endpoints = GPU_ENDPOINTS.copy()
 
     if LAST_WORKING_GPU in endpoints:
         endpoints.remove(LAST_WORKING_GPU)
         endpoints.insert(0, LAST_WORKING_GPU)
+
+    result_image = None
 
     for endpoint in endpoints:
 
@@ -294,32 +349,44 @@ async def generate(request: GenerateRequest):
 
         if result:
             LAST_WORKING_GPU = endpoint
-            return {
-                "ok": True,
-                "source": endpoint,
-                "image": result
+            result_image = result
+            break
+
+    # ---------------------------------
+    # FALLBACK
+    # ---------------------------------
+
+    if not result_image:
+        print("Using fallback")
+
+        try:
+            img_url = next(fallback_cycle)
+            r = requests.get(img_url, timeout=5)
+            r.raise_for_status()
+            result_image = to_data_url(r.content)
+        except:
+            result_image = None
+
+    # ---------------------------------
+    # STORE RESULT + CLEANUP
+    # ---------------------------------
+
+    with LOCK:
+
+        if result_image:
+            REQUEST_CACHE[fingerprint] = {
+                "image": result_image,
+                "time": time.time()
             }
 
-    # FALLBACK
-    print("Using fallback")
+        if fingerprint in IN_FLIGHT:
+            IN_FLIGHT.remove(fingerprint)
 
-    try:
-        img_url = next(fallback_cycle)
-        r = requests.get(img_url, timeout=5)
-        r.raise_for_status()
-
-        return {
-            "ok": True,
-            "source": "fallback",
-            "image": to_data_url(r.content)
-        }
-
-    except:
-        return {
-            "ok": True,
-            "source": "emergency",
-            "image": None
-        }
+    return {
+        "ok": True,
+        "source": "gpu" if result_image else "emergency",
+        "image": result_image
+    }
 
 # =====================================================
 # HEALTH
