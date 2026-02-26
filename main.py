@@ -15,15 +15,6 @@ IN_FLIGHT = set()
 CACHE_TTL = 60  # sekunder
 LOCK = threading.Lock()
 
-def build_fingerprint(request: GenerateRequest) -> str:
-
-    img_hash = hashlib.sha1(
-        request.image_base64.encode()
-    ).hexdigest()[:12]
-
-    raw = f"{request.styleKey}-{request.seed}-{img_hash}-{request.clientId}"
-    return hashlib.sha1(raw.encode()).hexdigest()
-    
 # =====================================================
 # APP INIT
 # =====================================================
@@ -58,6 +49,15 @@ class GenerateRequest(BaseModel):
     mode: Optional[str] = None
     clientId: Optional[str] = None
 
+def build_fingerprint(request: GenerateRequest) -> str:
+
+    img_hash = hashlib.sha1(
+        request.image_base64.encode()
+    ).hexdigest()[:12]
+
+    raw = f"{request.styleKey}-{request.seed}-{img_hash}-{request.clientId}"
+    return hashlib.sha1(raw.encode()).hexdigest()
+    
 # =====================================================
 # GPU CONFIG
 # =====================================================
