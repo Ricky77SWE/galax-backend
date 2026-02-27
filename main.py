@@ -252,7 +252,8 @@ while time.time() - start < MAX_TOTAL_TIME:
             f"{base}/history/{prompt_id}",
             timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
         )
-    except:
+    except Exception as e:
+        print("History fetch error:", e)
         continue
 
     if h.status_code != 200:
@@ -390,7 +391,7 @@ async def generate(request: GenerateRequest):
 
     return {
         "ok": True,
-        "source": "gpu" if result_image else "emergency",
+        "source": "gpu" if LAST_WORKING_GPU else "fallback",
         "image": result_image
     }
 
