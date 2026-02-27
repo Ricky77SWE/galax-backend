@@ -209,9 +209,11 @@ def run_gpu_job(endpoint, request):
     base = endpoint.rstrip("/")
 
     try:
-        # 1️⃣ Quick wake check
-        r = requests.get(f"{base}/system_stats",
-                         timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT))
+        # 1️⃣ Wake check
+        r = requests.get(
+            f"{base}/system_stats",
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
         if r.status_code != 200:
             return None
 
@@ -221,76 +223,84 @@ def run_gpu_job(endpoint, request):
 
         files = {"image": ("upload.png", image_bytes, "image/png")}
 
-        r = requests.post(f"{base}/upload/image",
-                          files=files,
-                          timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT))
+        r = requests.post(
+            f"{base}/upload/image",
+            files=files,
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
         r.raise_for_status()
 
         uploaded_name = r.json()["name"]
 
         # 3️⃣ Build workflow
-        workflow = build_workflow(request.styleKey,
-                                  request.seed,
-                                  uploaded_name)
+        workflow = build_workflow(
+            request.styleKey,
+            request.seed,
+            uploaded_name
+        )
 
-        r = requests.post(f"{base}/prompt",
-                          json={"prompt": workflow, "client_id": "galax"},
-                          timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT))
+        r = requests.post(
+            f"{base}/prompt",
+            json={"prompt": workflow, "client_id": "galax"},
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
         r.raise_for_status()
 
         prompt_id = r.json()["prompt_id"]
 
-# 4️⃣ Poll
-start = time.time()
+        # 4️⃣ Poll for result
+        start = time.time()
 
-while time.time() - start < MAX_TOTAL_TIME:
+        while time.time() - start < MAX_TOTAL_TIME:
 
-    time.sleep(POLL_INTERVAL)
+            time.sleep(POLL_INTERVAL)
 
-    try:
-        h = requests.get(
-            f"{base}/history/{prompt_id}",
-            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-        )
+            try:
+                h = requests.get(
+                    f"{base}/history/{prompt_id}",
+                    timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+                )
+            except Exception as e:
+                print("History fetch error:", e)
+                continue
+
+            if h.status_code != 200:
+                continue
+
+            data = h.json()
+
+            if prompt_id not in data:
+                continue
+
+            outputs = data[prompt_id].get("outputs", {})
+
+            for node in outputs.values():
+                images = node.get("images")
+                if images:
+                    image_meta = images[0]
+
+                    view_url = (
+                        f"{base}/view?"
+                        f"filename={image_meta['filename']}&"
+                        f"subfolder={image_meta.get('subfolder','')}&"
+                        f"type={image_meta.get('type','output')}"
+                    )
+
+                    img_resp = requests.get(
+                        view_url,
+                        timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+                    )
+                    img_resp.raise_for_status()
+
+                    print("🟢 GPU SUCCESS:", base)
+                    return to_data_url(img_resp.content)
+
+        return None
+
     except Exception as e:
-        print("History fetch error:", e)
-        continue
-
-    if h.status_code != 200:
-        continue
-
-    data = h.json()
-
-    if prompt_id not in data:
-        continue
-
-    outputs = data[prompt_id].get("outputs", {})
-
-    for node in outputs.values():
-        images = node.get("images")
-        if images:
-            image_meta = images[0]
-
-            view_url = (
-                f"{base}/view?"
-                f"filename={image_meta['filename']}&"
-                f"subfolder={image_meta.get('subfolder','')}&"
-                f"type={image_meta.get('type','output')}"
-            )
-
-            img_resp = requests.get(
-                view_url,
-                timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-            )
-            img_resp.raise_for_status()
-
-            print("🟢 GPU SUCCESS:", base)
-            return to_data_url(img_resp.content)
-
-except Exception as e:
-    print("GPU ERROR:", e)
-    return None
-
+        print("GPU ERROR:", e)
+        return None
+        
 # =====================================================
 # MAIN ENDPOINT
 # =====================================================
