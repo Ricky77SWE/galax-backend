@@ -134,38 +134,91 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
         f"{random.choice(BACKGROUND_VARIATIONS)}, "
         f"{random.choice(BACKGROUND_GLOW_VARIATIONS)}."
     )
-    
+
     positive_text = (
-        "High quality 3D animated fantasy creature. "
-        "STRICTLY preserve original silhouette, proportions, and pose from the drawing. "
-        "Do NOT change body shape. "
-        "Preserve dominant colors exactly as in the drawing. "
-        "Maintain original limb placement and structure. "
-        "Clearly non-human creature. "
+        "High quality stylized 3D animated cartoon character. "
+        "Rounded soft volumetric body. "
+        "Pixar-style cinematic lighting. "
+        "Strong depth and dimensional shading. "
+        "Soft rim light and subtle glow. "
+        "Preserve overall silhouette and pose from the drawing. "
+        "Preserve dominant colors from the drawing. "
+        "Clearly non-human fantasy creature. "
         f"{GALAX_DESCRIPTIONS.get(style_key, '')} "
         f"{variation_text}"
     )
 
     negative_text = (
-        "realistic human, photorealistic, horror, glitch, distorted body, extra limbs"
+        "realistic human, photorealistic, horror, glitch, distorted body, "
+        "extra limbs, thin line art, flat drawing, 2D sketch"
     )
 
     return {
-        "1": {"class_type": "CheckpointLoaderSimple",
-              "inputs": {"ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"}},
 
-        "2": {"class_type": "VAELoader",
-              "inputs": {"vae_name": "sdxl_vae.safetensors"}},
+        # Load checkpoint
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+            }
+        },
 
-        "3": {"class_type": "CLIPTextEncode",
-              "inputs": {"text": positive_text, "clip": ["1", 1]}},
+        # Load VAE
+        "2": {
+            "class_type": "VAELoader",
+            "inputs": {
+                "vae_name": "sdxl_vae.safetensors"
+            }
+        },
 
-        "4": {"class_type": "CLIPTextEncode",
-              "inputs": {"text": negative_text, "clip": ["1", 1]}},
+        # Positive prompt
+        "3": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": positive_text,
+                "clip": ["1", 1]
+            }
+        },
 
-        "7": {"class_type": "LoadImage",
-              "inputs": {"image": uploaded_name}},
+        # Negative prompt
+        "4": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": negative_text,
+                "clip": ["1", 1]
+            }
+        },
 
+        # Load drawing
+        "7": {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": uploaded_name
+            }
+        },
+
+        # Depth ControlNet
+        "6": {
+            "class_type": "ControlNetLoader",
+            "inputs": {
+                "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
+            }
+        },
+
+        # Apply ControlNet
+        "9": {
+            "class_type": "ControlNetApply",
+            "inputs": {
+                "conditioning": ["3", 0],
+                "control_net": ["6", 0],
+                "image": ["7", 0],
+                "strength": 0.55,
+                "guidance_start": 0.0,
+                "guidance_end": 0.9
+            }
+        },
+
+        # Encode drawing for img2img
         "8": {
             "class_type": "VAEEncode",
             "inputs": {
@@ -174,26 +227,52 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         },
 
-        "12": {"class_type": "KSampler",
-               "inputs": {
-                   "model": ["1", 0],
-                   "positive": ["3", 0],
-                   "negative": ["4", 0],
-                   "seed": seed,
-                   "steps": 32,
-                   "cfg": 3.8,
-                   "sampler_name": "dpmpp_2m_sde",
-                   "scheduler": "karras",
-                   "denoise": 0.75,
-                   "latent_image": ["8", 0]
-               }},
+        # LoRA loader
+        "10": {
+            "class_type": "LoraLoader",
+            "inputs": {
+                "model": ["1", 0],
+                "clip": ["1", 1],
+                "lora_name": "realcartoon3d_v17.safetensors",
+                "strength_model": 0.6,
+                "strength_clip": 0.6
+            }
+        },
 
-        "13": {"class_type": "VAEDecode",
-               "inputs": {"samples": ["12", 0], "vae": ["2", 0]}},
+        # Sampler
+        "12": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["10", 0],
+                "positive": ["9", 0],   # ControlNet-conditioned prompt
+                "negative": ["4", 0],
+                "seed": seed,
+                "steps": 32,
+                "cfg": 4.0,
+                "sampler_name": "dpmpp_2m_sde",
+                "scheduler": "karras",
+                "denoise": 0.75,
+                "latent_image": ["8", 0]
+            }
+        },
 
-        "14": {"class_type": "SaveImage",
-               "inputs": {"images": ["13", 0],
-                          "filename_prefix": "galax"}}
+        # Decode
+        "13": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["12", 0],
+                "vae": ["2", 0]
+            }
+        },
+
+        # Save
+        "14": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "images": ["13", 0],
+                "filename_prefix": "galax"
+            }
+        }
     }
 
 # =====================================================
