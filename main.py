@@ -174,20 +174,17 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         },
 
-        "11": {"class_type": "EmptyLatentImage",
-               "inputs": {"width": 896, "height": 896, "batch_size": 1}},
-
         "12": {"class_type": "KSampler",
                "inputs": {
                    "model": ["1", 0],
                    "positive": ["3", 0],
                    "negative": ["4", 0],
                    "seed": seed,
-                   "steps": 28,
-                   "cfg": 3.0,
+                   "steps": 32,
+                   "cfg": 3.8,
                    "sampler_name": "dpmpp_2m_sde",
                    "scheduler": "karras",
-                   "denoise": 0.6,
+                   "denoise": 0.75,
                    "latent_image": ["8", 0]
                }},
 
