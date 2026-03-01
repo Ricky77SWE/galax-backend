@@ -96,39 +96,30 @@ def to_data_url(image_bytes: bytes) -> str:
     return f"data:image/png;base64,{b64}"
 
 # =====================================================
-# STYLE SYSTEM
+# STYLE SYSTEM (SIMPLIFIED – DRAWING FIRST)
 # =====================================================
 
-PROPORTION_VARIATIONS = [
-    "slightly rounder body proportions",
-    "slightly taller creature proportions",
-    "slightly bigger head compared to body",
-]
-
-BODY_VARIATIONS = [
-    "slightly taller proportions",
-    "slightly rounder proportions",
-]
-
-TEXTURE_VARIATIONS = [
-    "soft plush surface",
-    "soft fluffy fur",
-    "smooth animated texture",
+BACKGROUND_GLOW_VARIATIONS = [
+    "soft magical rim light",
+    "subtle glowing aura around the character",
+    "gentle cinematic studio lighting",
+    "soft ambient glow from behind",
 ]
 
 BACKGROUND_VARIATIONS = [
-    "soft magical pink background",
-    "colorful sky background",
-    "simple gradient background",
+    "simple soft gradient background",
+    "dark magical background with subtle light haze",
+    "soft pastel sky background",
+    "clean minimal background with light bloom",
 ]
 
 GALAX_DESCRIPTIONS = {
-    "blobbis": "Small cute plush animal with compact rounded body.",
-    "kramis": "Large friendly creature with big soft body.",
-    "plupp": "Small magical glowing creature.",
-    "snurroga": "Colorful playful fantasy creature.",
-    "sticky": "Agile fantasy creature with dynamic pose.",
-    "wille": "Tiny happy baby fantasy creature."
+    "blobbis": "Small compact rounded creature.",
+    "kramis": "Large soft creature with big body mass.",
+    "plupp": "Small magical creature with gentle glow.",
+    "snurroga": "Playful fantasy creature with expressive features.",
+    "sticky": "Agile creature with dynamic posture.",
+    "wille": "Tiny happy creature with small body and large head."
 }
 
 # =====================================================
@@ -140,19 +131,19 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     seed = seed or random.randint(1, 999999999)
 
     variation_text = (
-        f"{random.choice(PROPORTION_VARIATIONS)}, "
-        f"{random.choice(BODY_VARIATIONS)}, "
-        f"{random.choice(TEXTURE_VARIATIONS)}, "
-        f"{random.choice(BACKGROUND_VARIATIONS)}."
+        f"{random.choice(BACKGROUND_VARIATIONS)}, "
+        f"{random.choice(BACKGROUND_GLOW_VARIATIONS)}."
     )
-
+    
     positive_text = (
-        "High-quality stylized 3D animated cute fantasy creature. "
-        "STRICTLY preserve original silhouette and proportions. "
-        "Preserve dominant colors from the drawing. "
-        "Clearly NON-HUMAN creature. "
-        f"{variation_text} "
-        f"{GALAX_DESCRIPTIONS.get(style_key, '')}"
+        "High quality 3D animated fantasy creature. "
+        "STRICTLY preserve original silhouette, proportions, and pose from the drawing. "
+        "Do NOT change body shape. "
+        "Preserve dominant colors exactly as in the drawing. "
+        "Maintain original limb placement and structure. "
+        "Clearly non-human creature. "
+        f"{GALAX_DESCRIPTIONS.get(style_key, '')} "
+        f"{variation_text}"
     )
 
     negative_text = (
@@ -175,6 +166,14 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
         "7": {"class_type": "LoadImage",
               "inputs": {"image": uploaded_name}},
 
+        "8": {
+            "class_type": "VAEEncode",
+            "inputs": {
+                "pixels": ["7", 0],
+                "vae": ["2", 0]
+            }
+        },
+
         "11": {"class_type": "EmptyLatentImage",
                "inputs": {"width": 896, "height": 896, "batch_size": 1}},
 
@@ -185,11 +184,11 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                    "negative": ["4", 0],
                    "seed": seed,
                    "steps": 28,
-                   "cfg": 3.4,
+                   "cfg": 3.0,
                    "sampler_name": "dpmpp_2m_sde",
                    "scheduler": "karras",
-                   "denoise": 0.85,
-                   "latent_image": ["11", 0]
+                   "denoise": 0.6,
+                   "latent_image": ["8", 0]
                }},
 
         "13": {"class_type": "VAEDecode",
