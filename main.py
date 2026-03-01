@@ -136,14 +136,14 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
     )
 
     positive_text = (
-        "High quality stylized 3D animated cartoon character. "
-        "Rounded soft volumetric body. "
-        "Pixar-style cinematic lighting. "
-        "Strong depth and dimensional shading. "
-        "Soft rim light and subtle glow. "
-        "Preserve overall silhouette and pose from the drawing. "
-        "Preserve dominant colors from the drawing. "
-        "Clearly non-human fantasy creature. "
+        "High quality stylized 3D animated cartoon creature. "
+        "Convert neon line drawing into a solid 3D character body. "
+        "Thick rounded volumetric body instead of thin lines. "
+        "Build full character volume from the sketch. "
+        "Soft cinematic lighting and colorful rim glow. "
+        "Keep original pose and overall silhouette from the drawing. "
+        "Preserve main color idea from the lines. "
+        "Clearly non-human fantasy creature."
         f"{GALAX_DESCRIPTIONS.get(style_key, '')} "
         f"{variation_text}"
     )
@@ -212,9 +212,9 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.55,
+                "strength": 0.4,
                 "guidance_start": 0.0,
-                "guidance_end": 0.9
+                "guidance_end": 0.8
             }
         },
 
@@ -234,8 +234,8 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "model": ["1", 0],
                 "clip": ["1", 1],
                 "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.6,
-                "strength_clip": 0.6
+                "strength_model": 0.75,
+                "strength_clip": 0.75
             }
         },
 
@@ -247,11 +247,11 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "positive": ["9", 0],   # ControlNet-conditioned prompt
                 "negative": ["4", 0],
                 "seed": seed,
-                "steps": 32,
-                "cfg": 4.0,
+                "steps": 34,
+                "cfg": 5.0,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
-                "denoise": 0.75,
+                "denoise": 0.88,
                 "latent_image": ["8", 0]
             }
         },
