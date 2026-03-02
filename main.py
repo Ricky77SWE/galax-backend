@@ -137,25 +137,25 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
 
     positive_text = (
         "High quality stylized 3D animated cartoon creature. "
-        "Convert neon line drawing into a solid 3D character body. "
-        "Thick rounded volumetric body instead of thin lines. "
-        "Build full character volume from the sketch. "
-        "Soft cinematic lighting and colorful rim glow. "
-        "Keep original pose and overall silhouette from the drawing. "
+        "Interpret the drawing as contour guide only. "
+        "Build a thick solid rounded 3D character body inside the lines. "
+        "Convert neon lines into soft glowing edges on a full volumetric character. "
+        "Strong depth, soft shadows, cinematic rim light. "
+        "Keep overall silhouette and pose from the drawing. "
         "Preserve main color idea from the lines. "
-        "Clearly non-human fantasy creature."
+        "Clearly non-human fantasy creature. "
         f"{GALAX_DESCRIPTIONS.get(style_key, '')} "
         f"{variation_text}"
     )
 
     negative_text = (
         "realistic human, photorealistic, horror, glitch, distorted body, "
-        "extra limbs, thin line art, flat drawing, 2D sketch"
+        "thin line art, flat drawing, 2D sketch, wireframe, transparent body"
     )
 
     return {
 
-        # Load checkpoint
+        # Checkpoint
         "1": {
             "class_type": "CheckpointLoaderSimple",
             "inputs": {
@@ -163,7 +163,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         },
 
-        # Load VAE
+        # VAE
         "2": {
             "class_type": "VAELoader",
             "inputs": {
@@ -197,11 +197,13 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         },
 
-        # Depth ControlNet
+        # ControlNet loader (byt till canny om möjligt)
         "6": {
             "class_type": "ControlNetLoader",
             "inputs": {
                 "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
+                # bättre om du har:
+                # "controlnet-canny-sdxl-1.0.safetensors"
             }
         },
 
@@ -214,28 +216,29 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "image": ["7", 0],
                 "strength": 0.4,
                 "guidance_start": 0.0,
-                "guidance_end": 0.8
+                "guidance_end": 0.75
             }
         },
 
-        # Encode drawing for img2img
-        "8": {
-            "class_type": "VAEEncode",
-            "inputs": {
-                "pixels": ["7", 0],
-                "vae": ["2", 0]
-            }
-        },
-
-        # LoRA loader
+        # LoRA
         "10": {
             "class_type": "LoraLoader",
             "inputs": {
                 "model": ["1", 0],
                 "clip": ["1", 1],
                 "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.75,
-                "strength_clip": 0.75
+                "strength_model": 0.8,
+                "strength_clip": 0.8
+            }
+        },
+
+        # Start from noise
+        "11": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {
+                "width": 896,
+                "height": 896,
+                "batch_size": 1
             }
         },
 
@@ -244,15 +247,15 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             "class_type": "KSampler",
             "inputs": {
                 "model": ["10", 0],
-                "positive": ["9", 0],   # ControlNet-conditioned prompt
+                "positive": ["9", 0],
                 "negative": ["4", 0],
                 "seed": seed,
-                "steps": 34,
-                "cfg": 5.0,
+                "steps": 36,
+                "cfg": 5.5,
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
-                "denoise": 0.88,
-                "latent_image": ["8", 0]
+                "denoise": 1.0,
+                "latent_image": ["11", 0]
             }
         },
 
