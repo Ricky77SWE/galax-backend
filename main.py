@@ -198,6 +198,14 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         },
 
+        "8": {
+            "class_type": "VAEEncode",
+            "inputs": {
+                "pixels": ["7", 0],
+                 "vae": ["2", 0]
+            }
+        },
+
         # ControlNet loader (byt till canny om möjligt)
         "6": {
             "class_type": "ControlNetLoader",
