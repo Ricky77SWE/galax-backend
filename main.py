@@ -124,6 +124,76 @@ GALAX_DESCRIPTIONS = {
 }
 
 # =====================================================
+# MODE TUNING VARIABLES
+# =====================================================
+import random
+from typing import Optional
+from PIL import Image
+import numpy as np
+
+# 🔹 Hur mycket färg som krävs för COLOR_MODE
+COLOR_PIXEL_THRESHOLD = 0.08      # 8% färgpixlar
+SCRIBBLE_PIXEL_THRESHOLD = 0.02   # under 2% = EXTREME_SCRIBBLE
+
+# ===============================
+# EXTREME SCRIBBLE MODE
+# ===============================
+SCRIBBLE_DENOISE = 1.0
+SCRIBBLE_CFG = 3.5
+SCRIBBLE_CONTROLNET_STRENGTH = 0.95
+SCRIBBLE_LORA_STRENGTH = 0.75
+
+# ===============================
+# LINE MODE
+# ===============================
+LINE_DENOISE = 0.90
+LINE_CFG = 3.0
+LINE_CONTROLNET_STRENGTH = 0.85
+LINE_LORA_STRENGTH = 0.65
+
+# ===============================
+# COLOR MODE
+# ===============================
+COLOR_DENOISE = 0.40
+COLOR_CFG = 2.5
+COLOR_CONTROLNET_STRENGTH = 0.75
+COLOR_LORA_STRENGTH = 0.55
+
+# ===============================
+# Sampler
+# ===============================
+SAMPLER_STEPS = 30
+SAMPLER_NAME = "dpmpp_2m_sde"
+SAMPLER_SCHEDULER = "karras"
+
+# ===============================
+# Models
+# ===============================
+CHECKPOINT_NAME = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+VAE_NAME = "sdxl_vae.safetensors"
+CONTROLNET_MODEL = "controlnet-canny-sdxl-1.0.safetensors"
+LORA_NAME = "realcartoon3d_v17.safetensors"
+
+
+# =====================================================
+# COLOUR DETECTION
+# =====================================================
+
+def detect_color_ratio(image_path: str) -> float:
+    img = Image.open(image_path).convert("RGB")
+    arr = np.array(img)
+
+    non_black = np.sum(
+        (arr[:, :, 0] > 20) |
+        (arr[:, :, 1] > 20) |
+        (arr[:, :, 2] > 20)
+    )
+
+    total = arr.shape[0] * arr.shape[1]
+    return non_black / total
+
+
+# =====================================================
 # WORKFLOW BUILDER
 # =====================================================
 
@@ -131,10 +201,41 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
 
     seed = seed or random.randint(1, 999999999)
 
-    variation_text = (
-        f"{random.choice(BACKGROUND_VARIATIONS)}, "
-        f"{random.choice(BACKGROUND_GLOW_VARIATIONS)}."
-    )
+    # -------------------------------------------------
+    # Mode detection
+    # -------------------------------------------------
+
+    color_ratio = detect_color_ratio(uploaded_name)
+
+    if color_ratio < SCRIBBLE_PIXEL_THRESHOLD:
+        mode = "EXTREME_SCRIBBLE"
+        denoise = SCRIBBLE_DENOISE
+        cfg = SCRIBBLE_CFG
+        control_strength = SCRIBBLE_CONTROLNET_STRENGTH
+        lora_strength = SCRIBBLE_LORA_STRENGTH
+        latent_source = ["11", 0]
+
+    elif color_ratio < COLOR_PIXEL_THRESHOLD:
+        mode = "LINE"
+        denoise = LINE_DENOISE
+        cfg = LINE_CFG
+        control_strength = LINE_CONTROLNET_STRENGTH
+        lora_strength = LINE_LORA_STRENGTH
+        latent_source = ["11", 0]
+
+    else:
+        mode = "COLOR"
+        denoise = COLOR_DENOISE
+        cfg = COLOR_CFG
+        control_strength = COLOR_CONTROLNET_STRENGTH
+        lora_strength = COLOR_LORA_STRENGTH
+        latent_source = ["8", 0]
+
+    print(f"MODE: {mode} | color_ratio={color_ratio:.3f}")
+
+    # -------------------------------------------------
+    # Prompts
+    # -------------------------------------------------
 
     positive_text = (
         "High quality stylized 3D animated cartoon creature. "
@@ -144,9 +245,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
         "Strong depth, soft shadows, cinematic rim light. "
         "Keep overall silhouette and pose from the drawing. "
         "Preserve main color idea from the lines. "
-        "Clearly non-human fantasy creature. "
-        f"{GALAX_DESCRIPTIONS.get(style_key, '')} "
-        f"{variation_text}"
+        "Clearly non-human fantasy creature."
     )
 
     negative_text = (
@@ -154,13 +253,17 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
         "thin line art, flat drawing, 2D sketch, wireframe, transparent body"
     )
 
+    # -------------------------------------------------
+    # Workflow
+    # -------------------------------------------------
+
     return {
 
         # Checkpoint
         "1": {
             "class_type": "CheckpointLoaderSimple",
             "inputs": {
-                "ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+                "ckpt_name": CHECKPOINT_NAME
             }
         },
 
@@ -168,25 +271,25 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
         "2": {
             "class_type": "VAELoader",
             "inputs": {
-                "vae_name": "sdxl_vae.safetensors"
+                "vae_name": VAE_NAME
             }
         },
 
-        # Positive prompt
+        # Positive
         "3": {
             "class_type": "CLIPTextEncode",
             "inputs": {
                 "text": positive_text,
-                "clip": ["1", 1]
+                "clip": ["10", 1]
             }
         },
 
-        # Negative prompt
+        # Negative
         "4": {
             "class_type": "CLIPTextEncode",
             "inputs": {
                 "text": negative_text,
-                "clip": ["1", 1]
+                "clip": ["10", 1]
             }
         },
 
@@ -198,32 +301,30 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         },
 
+        # VAE Encode (for COLOR mode)
         "8": {
             "class_type": "VAEEncode",
             "inputs": {
                 "pixels": ["7", 0],
-                 "vae": ["2", 0]
+                "vae": ["2", 0]
             }
         },
 
-        # ControlNet loader (byt till canny om möjligt)
+        # ControlNet
         "6": {
             "class_type": "ControlNetLoader",
             "inputs": {
-                "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
-                # bättre om du har:
-                # "controlnet-canny-sdxl-1.0.safetensors"
+                "control_net_name": CONTROLNET_MODEL
             }
         },
 
-        # Apply ControlNet
         "9": {
             "class_type": "ControlNetApply",
             "inputs": {
                 "conditioning": ["3", 0],
                 "control_net": ["6", 0],
                 "image": ["7", 0],
-                "strength": 0.75,
+                "strength": control_strength,
                 "guidance_start": 0.0,
                 "guidance_end": 0.9
             }
@@ -235,13 +336,13 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             "inputs": {
                 "model": ["1", 0],
                 "clip": ["1", 1],
-                "lora_name": "realcartoon3d_v17.safetensors",
-                "strength_model": 0.55,
-                "strength_clip": 0.55
+                "lora_name": LORA_NAME,
+                "strength_model": lora_strength,
+                "strength_clip": lora_strength
             }
         },
 
-        # Start from noise
+        # Empty latent (for LINE + SCRIBBLE)
         "11": {
             "class_type": "EmptyLatentImage",
             "inputs": {
@@ -259,12 +360,12 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "positive": ["9", 0],
                 "negative": ["4", 0],
                 "seed": seed,
-                "steps": 30,
-                "cfg": 2.5,
-                "sampler_name": "dpmpp_2m_sde",
-                "scheduler": "karras",
-                "denoise": 0.40,
-                "latent_image": ["8", 0]
+                "steps": SAMPLER_STEPS,
+                "cfg": cfg,
+                "sampler_name": SAMPLER_NAME,
+                "scheduler": SAMPLER_SCHEDULER,
+                "denoise": denoise,
+                "latent_image": latent_source
             }
         },
 
@@ -286,6 +387,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
             }
         }
     }
+
 
 # =====================================================
 # GPU EXECUTION
