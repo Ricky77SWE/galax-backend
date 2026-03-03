@@ -256,7 +256,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
                 "sampler_name": "dpmpp_2m_sde",
                 "scheduler": "karras",
                 "denoise": 0.90,
-                "latent_image": ["11", 0]
+                "latent_image": ["8", 0]
             }
         },
 
