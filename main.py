@@ -69,13 +69,39 @@ GPU_ENDPOINTS = [
     "https://6yo3hior7k7lf8-8188.proxy.runpod.net"
 ]
 
-LAST_WORKING_GPU = None
+# ---------------------------------
+# GPU EXECUTION (SAFE MULTI-GPU)
+# ---------------------------------
+
+result_image = None
+
+for endpoint in GPU_ENDPOINTS:
+
+    print("Trying GPU:", endpoint)
+
+    result_image = run_gpu_job(endpoint, request)
+
+    if result_image:
+        LAST_WORKING_GPU = endpoint
+        break
+
+if not result_image:
+    print("All GPUs failed")
+
+# xtra
+endpoints = GPU_ENDPOINTS.copy()
+
+if LAST_WORKING_GPU in endpoints:
+    endpoints.remove(LAST_WORKING_GPU)
+    endpoints.insert(0, LAST_WORKING_GPU)
+
+for endpoint in endpoints:
 
 # PERFORMANCE
-MAX_TOTAL_TIME = 25
+MAX_TOTAL_TIME = 60
 POLL_INTERVAL = 0.25
-GPU_CONNECT_TIMEOUT = 5
-GPU_READ_TIMEOUT = 15
+GPU_CONNECT_TIMEOUT = 15
+GPU_READ_TIMEOUT = 30
 
 # =====================================================
 # FALLBACK
