@@ -533,29 +533,21 @@ async def generate(request: GenerateRequest):
         # Markera som aktiv
         IN_FLIGHT.add(fingerprint)
 
+
     # ---------------------------------
-    # GPU EXECUTION
+    # GPU EXECUTION (ONE GPU PER REQUEST)
     # ---------------------------------
+    
+    endpoint = random.choice(GPU_ENDPOINTS)
+    
+    print("Selected GPU:", endpoint)
+    
+    result_image = run_gpu_job(endpoint, request)
+    
+    if result_image:
+        LAST_WORKING_GPU = endpoint
 
-    endpoints = GPU_ENDPOINTS.copy()
-
-    if LAST_WORKING_GPU in endpoints:
-        endpoints.remove(LAST_WORKING_GPU)
-        endpoints.insert(0, LAST_WORKING_GPU)
-
-    result_image = None
-
-    for endpoint in endpoints:
-
-        print("Trying GPU:", endpoint)
-
-        result = run_gpu_job(endpoint, request)
-
-        if result:
-            LAST_WORKING_GPU = endpoint
-            result_image = result
-            break
-
+    
     # ---------------------------------
     # FALLBACK
     # ---------------------------------
