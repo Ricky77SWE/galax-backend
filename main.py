@@ -398,6 +398,7 @@ def run_gpu_job(endpoint, request):
     base = endpoint.rstrip("/")
 
     try:
+
         # 1️⃣ Wake check
         r = requests.get(
             f"{base}/system_stats",
@@ -421,7 +422,9 @@ def run_gpu_job(endpoint, request):
 
         uploaded_name = r.json()["name"]
 
-        # 3️⃣ Build workflow
+        # 🔒 IMPORTANT: If upload worked, do NOT allow fallback to other GPU
+        # Everything below MUST stay on this endpoint only
+
         workflow = build_workflow(
             request.styleKey,
             request.seed,
@@ -437,21 +440,17 @@ def run_gpu_job(endpoint, request):
 
         prompt_id = r.json()["prompt_id"]
 
-        # 4️⃣ Poll for result
+        # Poll same GPU only
         start = time.time()
 
         while time.time() - start < MAX_TOTAL_TIME:
 
             time.sleep(POLL_INTERVAL)
 
-            try:
-                h = requests.get(
-                    f"{base}/history/{prompt_id}",
-                    timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-                )
-            except Exception as e:
-                print("History fetch error:", e)
-                continue
+            h = requests.get(
+                f"{base}/history/{prompt_id}",
+                timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+            )
 
             if h.status_code != 200:
                 continue
@@ -479,9 +478,8 @@ def run_gpu_job(endpoint, request):
                         view_url,
                         timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
                     )
-                    img_resp.raise_for_status()
 
-                    print("🟢 GPU SUCCESS:", base)
+                    img_resp.raise_for_status()
                     return to_data_url(img_resp.content)
 
         return None
