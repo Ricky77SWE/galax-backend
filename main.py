@@ -88,15 +88,6 @@ for endpoint in GPU_ENDPOINTS:
 if not result_image:
     print("All GPUs failed")
 
-# xtra
-endpoints = GPU_ENDPOINTS.copy()
-
-if LAST_WORKING_GPU in endpoints:
-    endpoints.remove(LAST_WORKING_GPU)
-    endpoints.insert(0, LAST_WORKING_GPU)
-
-for endpoint in endpoints:
-
 # PERFORMANCE
 MAX_TOTAL_TIME = 60
 POLL_INTERVAL = 0.25
