@@ -276,7 +276,7 @@ SAMPLER_SCHEDULER = "karras"
 # ===============================
 CHECKPOINT_NAME = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
 VAE_NAME = "sdxl_vae.safetensors"
-CONTROLNET_MODEL = "CONTROLNET_MODEL = "controlnet-depth-sdxl-1.0.safetensors"
+CONTROLNET_MODEL = "controlnet-depth-sdxl-1.0.safetensors"
 LORA_NAME = "realcartoon3d_v17.safetensors"
 
 
