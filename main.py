@@ -58,6 +58,8 @@ def run_gpu_job(endpoint, request):
             return None
 
         # 2️⃣ Upload image
+        color_ratio = detect_color_ratio_from_base64(request.image_base64)
+        
         img_b64 = request.image_base64.split(",")[-1]
         image_bytes = base64.b64decode(img_b64)
 
@@ -78,7 +80,8 @@ def run_gpu_job(endpoint, request):
         workflow = build_workflow(
             request.styleKey,
             request.seed,
-            uploaded_name
+            uploaded_name,
+            color_ratio
         )
 
         r = requests.post(
@@ -228,7 +231,6 @@ GALAX_DESCRIPTIONS = {
 # =====================================================
 # MODE TUNING VARIABLES
 # =====================================================
-import random
 from typing import Optional
 from PIL import Image
 import numpy as np
@@ -281,17 +283,25 @@ LORA_NAME = "realcartoon3d_v17.safetensors"
 # COLOUR DETECTION
 # =====================================================
 
-def detect_color_ratio(image_path: str) -> float:
-    img = Image.open(image_path).convert("RGB")
+import io
+from PIL import Image
+import numpy as np
+
+def detect_color_ratio_from_base64(image_b64):
+
+    image_bytes = base64.b64decode(image_b64.split(",")[-1])
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
     arr = np.array(img)
 
     non_black = np.sum(
-        (arr[:, :, 0] > 20) |
-        (arr[:, :, 1] > 20) |
-        (arr[:, :, 2] > 20)
+        (arr[:,:,0] > 20) |
+        (arr[:,:,1] > 20) |
+        (arr[:,:,2] > 20)
     )
 
     total = arr.shape[0] * arr.shape[1]
+
     return non_black / total
 
 
@@ -299,15 +309,13 @@ def detect_color_ratio(image_path: str) -> float:
 # WORKFLOW BUILDER
 # =====================================================
 
-def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
+def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, color_ratio: float):
 
     seed = seed or random.randint(1, 999999999)
 
     # -------------------------------------------------
     # Mode detection
     # -------------------------------------------------
-
-    color_ratio = detect_color_ratio(uploaded_name)
 
     if color_ratio < SCRIBBLE_PIXEL_THRESHOLD:
         mode = "EXTREME_SCRIBBLE"
@@ -542,15 +550,15 @@ async def generate(request: GenerateRequest):
     
     endpoints = GPU_ENDPOINTS.copy()
     random.shuffle(endpoints)
-
+    
     result_image = None
-
+    
     for endpoint in endpoints:
-
+    
         print("Trying GPU:", endpoint)
-
+    
         result_image = run_gpu_job(endpoint, request)
-
+    
         if result_image:
             LAST_WORKING_GPU = endpoint
             break
