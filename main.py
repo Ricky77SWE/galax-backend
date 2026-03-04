@@ -170,24 +170,8 @@ GPU_ENDPOINTS = [
     "https://6yo3hior7k7lf8-8188.proxy.runpod.net"
 ]
 
-# ---------------------------------
-# GPU EXECUTION (SAFE MULTI-GPU)
-# ---------------------------------
+LAST_WORKING_GPU = None
 
-result_image = None
-
-for endpoint in GPU_ENDPOINTS:
-
-    print("Trying GPU:", endpoint)
-
-    result_image = run_gpu_job(endpoint, request)
-
-    if result_image:
-        LAST_WORKING_GPU = endpoint
-        break
-
-if not result_image:
-    print("All GPUs failed")
 
 # PERFORMANCE
 MAX_TOTAL_TIME = 60
@@ -556,15 +540,20 @@ async def generate(request: GenerateRequest):
     # GPU EXECUTION (ONE GPU PER REQUEST)
     # ---------------------------------
     
-    endpoint = random.choice(GPU_ENDPOINTS)
-    
-    print("Selected GPU:", endpoint)
-    
-    result_image = run_gpu_job(endpoint, request)
-    
-    if result_image:
-        LAST_WORKING_GPU = endpoint
+    endpoints = GPU_ENDPOINTS.copy()
+    random.shuffle(endpoints)
 
+    result_image = None
+
+    for endpoint in endpoints:
+
+        print("Trying GPU:", endpoint)
+
+        result_image = run_gpu_job(endpoint, request)
+
+        if result_image:
+            LAST_WORKING_GPU = endpoint
+            break
     
     # ---------------------------------
     # FALLBACK
