@@ -38,6 +38,107 @@ from keep_alive import start_keep_alive
 def startup_event():
     start_keep_alive()
 
+
+# =====================================================
+# GPU EXECUTION
+# =====================================================
+
+def run_gpu_job(endpoint, request):
+
+    base = endpoint.rstrip("/")
+
+    try:
+
+        # 1️⃣ Wake check
+        r = requests.get(
+            f"{base}/system_stats",
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
+        if r.status_code != 200:
+            return None
+
+        # 2️⃣ Upload image
+        img_b64 = request.image_base64.split(",")[-1]
+        image_bytes = base64.b64decode(img_b64)
+
+        files = {"image": ("upload.png", image_bytes, "image/png")}
+
+        r = requests.post(
+            f"{base}/upload/image",
+            files=files,
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
+        r.raise_for_status()
+
+        uploaded_name = r.json()["name"]
+
+        # 🔒 IMPORTANT: If upload worked, do NOT allow fallback to other GPU
+        # Everything below MUST stay on this endpoint only
+
+        workflow = build_workflow(
+            request.styleKey,
+            request.seed,
+            uploaded_name
+        )
+
+        r = requests.post(
+            f"{base}/prompt",
+            json={"prompt": workflow, "client_id": "galax"},
+            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+        )
+        r.raise_for_status()
+
+        prompt_id = r.json()["prompt_id"]
+
+        # Poll same GPU only
+        start = time.time()
+
+        while time.time() - start < MAX_TOTAL_TIME:
+
+            time.sleep(POLL_INTERVAL)
+
+            h = requests.get(
+                f"{base}/history/{prompt_id}",
+                timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+            )
+
+            if h.status_code != 200:
+                continue
+
+            data = h.json()
+
+            if prompt_id not in data:
+                continue
+
+            outputs = data[prompt_id].get("outputs", {})
+
+            for node in outputs.values():
+                images = node.get("images")
+                if images:
+                    image_meta = images[0]
+
+                    view_url = (
+                        f"{base}/view?"
+                        f"filename={image_meta['filename']}&"
+                        f"subfolder={image_meta.get('subfolder','')}&"
+                        f"type={image_meta.get('type','output')}"
+                    )
+
+                    img_resp = requests.get(
+                        view_url,
+                        timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
+                    )
+
+                    img_resp.raise_for_status()
+                    return to_data_url(img_resp.content)
+
+        return None
+
+    except Exception as e:
+        print("GPU ERROR:", e)
+        return None
+        
+
 # =====================================================
 # REQUEST MODEL
 # =====================================================
@@ -405,106 +506,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str):
         }
     }
 
-
-# =====================================================
-# GPU EXECUTION
-# =====================================================
-
-def run_gpu_job(endpoint, request):
-
-    base = endpoint.rstrip("/")
-
-    try:
-
-        # 1️⃣ Wake check
-        r = requests.get(
-            f"{base}/system_stats",
-            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-        )
-        if r.status_code != 200:
-            return None
-
-        # 2️⃣ Upload image
-        img_b64 = request.image_base64.split(",")[-1]
-        image_bytes = base64.b64decode(img_b64)
-
-        files = {"image": ("upload.png", image_bytes, "image/png")}
-
-        r = requests.post(
-            f"{base}/upload/image",
-            files=files,
-            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-        )
-        r.raise_for_status()
-
-        uploaded_name = r.json()["name"]
-
-        # 🔒 IMPORTANT: If upload worked, do NOT allow fallback to other GPU
-        # Everything below MUST stay on this endpoint only
-
-        workflow = build_workflow(
-            request.styleKey,
-            request.seed,
-            uploaded_name
-        )
-
-        r = requests.post(
-            f"{base}/prompt",
-            json={"prompt": workflow, "client_id": "galax"},
-            timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-        )
-        r.raise_for_status()
-
-        prompt_id = r.json()["prompt_id"]
-
-        # Poll same GPU only
-        start = time.time()
-
-        while time.time() - start < MAX_TOTAL_TIME:
-
-            time.sleep(POLL_INTERVAL)
-
-            h = requests.get(
-                f"{base}/history/{prompt_id}",
-                timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-            )
-
-            if h.status_code != 200:
-                continue
-
-            data = h.json()
-
-            if prompt_id not in data:
-                continue
-
-            outputs = data[prompt_id].get("outputs", {})
-
-            for node in outputs.values():
-                images = node.get("images")
-                if images:
-                    image_meta = images[0]
-
-                    view_url = (
-                        f"{base}/view?"
-                        f"filename={image_meta['filename']}&"
-                        f"subfolder={image_meta.get('subfolder','')}&"
-                        f"type={image_meta.get('type','output')}"
-                    )
-
-                    img_resp = requests.get(
-                        view_url,
-                        timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
-                    )
-
-                    img_resp.raise_for_status()
-                    return to_data_url(img_resp.content)
-
-        return None
-
-    except Exception as e:
-        print("GPU ERROR:", e)
-        return None
-        
 # =====================================================
 # MAIN ENDPOINT
 # =====================================================
