@@ -64,7 +64,7 @@ def run_gpu_job(endpoint, request):
         img_b64 = request.image_base64.split(",")[-1]
         image_bytes = base64.b64decode(img_b64)
 
-        files = {"image": ("upload.png", image_bytes, "image/png")}
+        files = {"image": (f"upload_{random.randint(1,9999999)}.png", image_bytes, "image/png")}
 
         r = requests.post(
             f"{base}/upload/image",
@@ -93,6 +93,7 @@ def run_gpu_job(endpoint, request):
         r.raise_for_status()
 
         prompt_id = r.json()["prompt_id"]
+        print("Prompt ID:", prompt_id)
 
         # Poll same GPU only
         start = time.time()
@@ -178,7 +179,7 @@ LAST_WORKING_GPU = None
 
 
 # PERFORMANCE
-MAX_TOTAL_TIME = 60
+MAX_TOTAL_TIME = 45
 POLL_INTERVAL = 0.25
 GPU_CONNECT_TIMEOUT = 15
 GPU_READ_TIMEOUT = 30
