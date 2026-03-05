@@ -115,12 +115,13 @@ def run_gpu_job(endpoint, request):
                 continue
 
             outputs = data[prompt_id].get("outputs", {})
-
-            for node in outputs.values():
-                images = node.get("images")
-                if images:
-                    image_meta = images[0]
-
+            
+            for node_id, node in outputs.items():
+            
+                if "images" in node and len(node["images"]) > 0:
+            
+                    image_meta = node["images"][0]
+                    
                     view_url = (
                         f"{base}/view?"
                         f"filename={image_meta['filename']}&"
