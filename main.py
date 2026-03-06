@@ -15,6 +15,7 @@ IN_FLIGHT = set()
 CACHE_TTL = 60  # sekunder
 LOCK = threading.Lock()
 FALLBACK_LOCK = threading.Lock()
+GPU_INDEX = 0
 
 # =====================================================
 # APP INIT
@@ -547,6 +548,7 @@ async def generate(request: GenerateRequest):
 
     global LAST_WORKING_GPU
     global LAST_FALLBACK_IMAGE
+    global GPU_INDEX
 
     fingerprint = build_fingerprint(request)
     now = time.time()
