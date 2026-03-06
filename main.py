@@ -58,8 +58,8 @@ def run_gpu_job(endpoint, request):
             return None
 
         # 2️⃣ Upload image
-        color_ratio = detect_color_ratio_from_base64(request.image_base64)
-        
+        metrics = analyze_drawing(request.image_base64)
+
         img_b64 = request.image_base64.split(",")[-1]
         image_bytes = base64.b64decode(img_b64)
 
@@ -81,7 +81,7 @@ def run_gpu_job(endpoint, request):
             request.styleKey,
             request.seed,
             uploaded_name,
-            color_ratio
+            metrics
         )
 
         r = requests.post(
