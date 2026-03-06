@@ -434,6 +434,20 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
 
     Inspired by a child's drawing but NOT following the lines.
     """
+
+    negative_text = """
+    realistic human
+    photorealistic
+    horror
+    ugly
+    distorted anatomy
+    thin stick figure
+    line drawing
+    scribble
+    sketch
+    anime
+    2D illustration
+    """
     
     return {
 
