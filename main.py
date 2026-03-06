@@ -14,6 +14,7 @@ REQUEST_CACHE = {}
 IN_FLIGHT = set()
 CACHE_TTL = 60  # sekunder
 LOCK = threading.Lock()
+FALLBACK_LOCK = threading.Lock()
 
 # =====================================================
 # APP INIT
@@ -181,13 +182,13 @@ GPU_ENDPOINTS = [
 ]
 
 LAST_WORKING_GPU = None
-
+MAX_GPU_ATTEMPTS = 2
 
 # PERFORMANCE
 MAX_TOTAL_TIME = 45
 POLL_INTERVAL = 0.5
-GPU_CONNECT_TIMEOUT = 15
-GPU_READ_TIMEOUT = 30
+GPU_CONNECT_TIMEOUT = 6
+GPU_READ_TIMEOUT = 20
 
 # =====================================================
 # FALLBACK
@@ -494,8 +495,8 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
         "5": {
             "class_type": "EmptyLatentImage",
             "inputs": {
-                "width": 896,
-                "height": 896,
+                "width": 768,
+                "height": 768,
                 "batch_size": 1
             }
         },
@@ -619,7 +620,8 @@ async def generate(request: GenerateRequest):
         print("Using fallback")
 
         try:
-            img_url = next(fallback_cycle)
+            with FALLBACK_LOCK:
+                img_url = next(fallback_cycle)
             r = requests.get(img_url, timeout=5)
             r.raise_for_status()
             result_image = to_data_url(r.content)
