@@ -231,59 +231,25 @@ GALAX_DESCRIPTIONS = {
 }
 
 # =====================================================
-# MODE TUNING VARIABLES
+# MODE TUNING VARIABLES (GALAX AI ENGINE)
 # =====================================================
 
 from typing import Optional
 import io
-import cv2
+import base64
+import random
 from PIL import Image
 import numpy as np
 
 # =====================================================
-# DRAWING ANALYSIS THRESHOLDS
+# Sampler (snabb men stabil)
 # =====================================================
 
-SCRIBBLE_EDGE_THRESHOLD = 0.003
-LINE_EDGE_THRESHOLD = 0.02
-
-SCRIBBLE_PIXEL_THRESHOLD = 0.015
-COLOR_PIXEL_THRESHOLD = 0.06
-
-# =====================================================
-# EXTREME SCRIBBLE MODE
-# =====================================================
-
-SCRIBBLE_DENOISE = 0.75
-SCRIBBLE_CFG = 3.5
-SCRIBBLE_CONTROLNET_STRENGTH = 0.55
-SCRIBBLE_LORA_STRENGTH = 0.80
-
-# =====================================================
-# LINE MODE
-# =====================================================
-
-LINE_DENOISE = 0.85
-LINE_CFG = 3.0
-LINE_CONTROLNET_STRENGTH = 0.60
-LINE_LORA_STRENGTH = 0.70
-
-# =====================================================
-# COLOR MODE
-# =====================================================
-
-COLOR_DENOISE = 0.40
-COLOR_CFG = 2.5
-COLOR_CONTROLNET_STRENGTH = 0.65
-COLOR_LORA_STRENGTH = 0.60
-
-# =====================================================
-# Sampler
-# =====================================================
-
-SAMPLER_STEPS = 20
+SAMPLER_STEPS = 24
 SAMPLER_NAME = "dpmpp_2m_sde"
 SAMPLER_SCHEDULER = "karras"
+
+CFG_SCALE = 3.5
 
 # =====================================================
 # Models
@@ -291,12 +257,9 @@ SAMPLER_SCHEDULER = "karras"
 
 CHECKPOINT_NAME = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
 VAE_NAME = "sdxl_vae.safetensors"
-CONTROLNET_MODEL = "controlnet-depth-sdxl-1.0.safetensors"
-LORA_NAME = "realcartoon3d_v17.safetensors"
-
 
 # =====================================================
-# DRAWING ANALYSIS (REPLACES SIMPLE PIXEL RATIO)
+# DRAWING ANALYSIS (GALAX ENGINE)
 # =====================================================
 
 def analyze_drawing(image_b64):
@@ -304,139 +267,177 @@ def analyze_drawing(image_b64):
     image_bytes = base64.b64decode(image_b64.split(",")[-1])
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    img_np = np.array(img)
+    arr = np.array(img)
 
-    h, w, _ = img_np.shape
+    h, w, _ = arr.shape
     total_pixels = h * w
 
-    # -----------------------------
-    # pixel density
-    # -----------------------------
+    # ---------------------------------
+    # how much drawing exists
+    # ---------------------------------
 
     non_black = np.sum(
-        (img_np[:,:,0] > 20) |
-        (img_np[:,:,1] > 20) |
-        (img_np[:,:,2] > 20)
+        (arr[:,:,0] > 20) |
+        (arr[:,:,1] > 20) |
+        (arr[:,:,2] > 20)
     )
 
-    pixel_ratio = non_black / total_pixels
+    coverage = non_black / total_pixels
 
-    # -----------------------------
-    # edge density
-    # -----------------------------
+    # ---------------------------------
+    # colorfulness metric
+    # ---------------------------------
 
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    r = arr[:,:,0].astype(float)
+    g = arr[:,:,1].astype(float)
+    b = arr[:,:,2].astype(float)
 
-    edges = cv2.Canny(gray, 50, 150)
+    rg = np.abs(r - g)
+    yb = np.abs(0.5*(r+g) - b)
 
-    edge_pixels = np.sum(edges > 0)
+    colorfulness = np.mean(rg) + np.mean(yb)
 
-    edge_ratio = edge_pixels / total_pixels
+    # ---------------------------------
+    # brightness
+    # ---------------------------------
 
-    # -----------------------------
-    # coverage area
-    # -----------------------------
-
-    coords = np.column_stack(np.where(edges > 0))
-
-    if len(coords) > 0:
-        y0, x0 = coords.min(axis=0)
-        y1, x1 = coords.max(axis=0)
-
-        box_area = (y1 - y0) * (x1 - x0)
-
-        coverage = box_area / total_pixels
-    else:
-        coverage = 0
+    brightness = np.mean(arr)
 
     return {
-        "pixel_ratio": pixel_ratio,
-        "edge_ratio": edge_ratio,
-        "coverage": coverage
+        "coverage": coverage,
+        "colorfulness": colorfulness,
+        "brightness": brightness
     }
 
 
 # =====================================================
-# MODE DETECTION
+# CHARACTER STYLE GENERATION
 # =====================================================
 
-def detect_mode(metrics):
+def build_character_style(metrics):
 
-    pixel_ratio = metrics["pixel_ratio"]
-    edge_ratio = metrics["edge_ratio"]
     coverage = metrics["coverage"]
+    colorfulness = metrics["colorfulness"]
+    brightness = metrics["brightness"]
 
-    if edge_ratio < SCRIBBLE_EDGE_THRESHOLD and pixel_ratio < SCRIBBLE_PIXEL_THRESHOLD:
-        return "EXTREME_SCRIBBLE"
+    # BODY SIZE
 
-    if pixel_ratio > COLOR_PIXEL_THRESHOLD and coverage > 0.2:
-        return "COLOR"
+    if coverage < 0.02:
+        body = "tiny skinny creature"
+    elif coverage < 0.06:
+        body = "small creature"
+    elif coverage < 0.15:
+        body = "medium creature"
+    else:
+        body = "large round fluffy creature"
 
-    return "LINE"
+    # COLOR STYLE
+
+    if colorfulness < 15:
+        colors = "soft pastel colors"
+    elif colorfulness < 40:
+        colors = "bright cartoon colors"
+    else:
+        colors = "very colorful rainbow fantasy colors"
+
+    # PERSONALITY
+
+    if brightness < 60:
+        personality = "mysterious magical creature"
+    elif brightness < 120:
+        personality = "cute friendly creature"
+    else:
+        personality = "happy energetic creature"
+
+    return body, colors, personality
 
 
 # =====================================================
-# WORKFLOW BUILDER
+# RANDOM CREATURE FEATURES (MAGIC SYSTEM)
 # =====================================================
 
-def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metrics: dict):
+def generate_creature_features():
+
+    eyes = random.choice([
+        "two big eyes",
+        "three glowing eyes",
+        "one giant eye",
+        "many tiny eyes"
+    ])
+
+    ears = random.choice([
+        "small ears",
+        "long bunny ears",
+        "tiny horns",
+        "round ears",
+        "no ears"
+    ])
+
+    tail = random.choice([
+        "short tail",
+        "long fluffy tail",
+        "tiny tail",
+        "no tail"
+    ])
+
+    texture = random.choice([
+        "soft fluffy fur",
+        "smooth cartoon skin",
+        "slimy texture",
+        "sparkling magical skin"
+    ])
+
+    extra = random.choice([
+        "tiny wings",
+        "small horns",
+        "antenna",
+        "glowing spots",
+        "none"
+    ])
+
+    return f"{eyes}, {ears}, {tail}, {texture}, {extra}"
+
+
+# =====================================================
+# WORKFLOW BUILDER (NO CONTROLNET)
+# =====================================================
+
+def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metrics):
 
     seed = seed or random.randint(1, 999999999)
 
-    mode = detect_mode(metrics)
+    body, colors, personality = build_character_style(metrics)
+    features = generate_creature_features()
+    
+    print("Drawing metrics:", metrics)
+    print("Generated character:", body, colors, personality)
 
-    if mode == "EXTREME_SCRIBBLE":
+    positive_text = f"""
+    Cute 3D cartoon fantasy creature.
 
-        denoise = SCRIBBLE_DENOISE
-        cfg = SCRIBBLE_CFG
-        control_strength = SCRIBBLE_CONTROLNET_STRENGTH
-        lora_strength = SCRIBBLE_LORA_STRENGTH
-        latent_source = ["11", 0]
+    Body type: {body}
+    Color palette: {colors}
+    Personality: {personality}
 
-    elif mode == "LINE":
+    Creature features: {features}
 
-        denoise = LINE_DENOISE
-        cfg = LINE_CFG
-        control_strength = LINE_CONTROLNET_STRENGTH
-        lora_strength = LINE_LORA_STRENGTH
-        latent_source = ["11", 0]
+    Pixar style character.
+    Large expressive eyes.
+    Rounded shapes.
+    Soft materials.
 
-    else:
+    Magical creature from the GALAX universe.
 
-        denoise = COLOR_DENOISE
-        cfg = COLOR_CFG
-        control_strength = COLOR_CONTROLNET_STRENGTH
-        lora_strength = COLOR_LORA_STRENGTH
-        latent_source = ["8", 0]
+    High quality 3D render.
+    Studio lighting.
+    Soft shadows.
 
-    print(f"MODE: {mode} | metrics={metrics}")
-
-    # -------------------------------------------------
-    # Prompts
-    # -------------------------------------------------
-
-    positive_text = (
-        "High quality stylized 3D cartoon creature. "
-        "Use the drawing only as loose inspiration. "
-        "Create a cute fantasy character with head, body, arms and legs. "
-        "Pixar style character design. "
-        "Soft volumetric lighting and shading. "
-        "Large expressive eyes. "
-        "Rounded shapes and soft materials. "
-        "Magical fantasy creature similar to GALAX characters."
-    )
-
-    negative_text = (
-        "realistic human, horror, distorted body, thin sketch lines, "
-        "wireframe, flat drawing, transparent body"
-    )
-
-    # -------------------------------------------------
-    # Workflow
-    # -------------------------------------------------
-
+    Inspired by a child's drawing but NOT following the lines.
+    """
+    
     return {
 
+        # MODEL
         "1": {
             "class_type": "CheckpointLoaderSimple",
             "inputs": {
@@ -444,6 +445,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
             }
         },
 
+        # VAE
         "2": {
             "class_type": "VAELoader",
             "inputs": {
@@ -451,68 +453,26 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
             }
         },
 
+        # POSITIVE PROMPT
         "3": {
             "class_type": "CLIPTextEncode",
             "inputs": {
                 "text": positive_text,
-                "clip": ["10", 1]
+                "clip": ["1",1]
             }
         },
 
+        # NEGATIVE PROMPT
         "4": {
             "class_type": "CLIPTextEncode",
             "inputs": {
                 "text": negative_text,
-                "clip": ["10", 1]
+                "clip": ["1",1]
             }
         },
 
-        "7": {
-            "class_type": "LoadImage",
-            "inputs": {
-                "image": uploaded_name
-            }
-        },
-
-        "8": {
-            "class_type": "VAEEncode",
-            "inputs": {
-                "pixels": ["7", 0],
-                "vae": ["2", 0]
-            }
-        },
-
-        "6": {
-            "class_type": "ControlNetLoader",
-            "inputs": {
-                "control_net_name": CONTROLNET_MODEL
-            }
-        },
-
-        "9": {
-            "class_type": "ControlNetApply",
-            "inputs": {
-                "conditioning": ["3", 0],
-                "control_net": ["6", 0],
-                "image": ["7", 0],
-                "strength": control_strength,
-                "guidance_start": 0.0,
-                "guidance_end": 0.9
-            }
-        },
-
-        "10": {
-            "class_type": "LoraLoader",
-            "inputs": {
-                "model": ["1", 0],
-                "clip": ["1", 1],
-                "lora_name": LORA_NAME,
-                "strength_model": lora_strength,
-                "strength_clip": lora_strength
-            }
-        },
-
-        "11": {
+        # LATENT IMAGE
+        "5": {
             "class_type": "EmptyLatentImage",
             "inputs": {
                 "width": 896,
@@ -521,34 +481,37 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
             }
         },
 
-        "12": {
+        # SAMPLER
+        "6": {
             "class_type": "KSampler",
             "inputs": {
-                "model": ["10", 0],
-                "positive": ["9", 0],
-                "negative": ["4", 0],
+                "model": ["1",0],
+                "positive": ["3",0],
+                "negative": ["4",0],
                 "seed": seed,
                 "steps": SAMPLER_STEPS,
-                "cfg": cfg,
+                "cfg": CFG_SCALE,
                 "sampler_name": SAMPLER_NAME,
                 "scheduler": SAMPLER_SCHEDULER,
-                "denoise": denoise,
-                "latent_image": latent_source
+                "denoise": 1.0,
+                "latent_image": ["5",0]
             }
         },
 
-        "13": {
+        # DECODE
+        "7": {
             "class_type": "VAEDecode",
             "inputs": {
-                "samples": ["12", 0],
-                "vae": ["2", 0]
+                "samples": ["6",0],
+                "vae": ["2",0]
             }
         },
 
-        "14": {
+        # SAVE
+        "8": {
             "class_type": "SaveImage",
             "inputs": {
-                "images": ["13", 0],
+                "images": ["7",0],
                 "filename_prefix": "galax"
             }
         }
