@@ -105,15 +105,19 @@ def run_gpu_job(endpoint, request):
                 f"{base}/history/{prompt_id}",
                 timeout=(GPU_CONNECT_TIMEOUT, GPU_READ_TIMEOUT)
             )
-
+            
             if h.status_code != 200:
                 continue
-
+            
             data = h.json()
-
+            
+            # history kan ibland vara tom första sekunderna
+            if not data:
+                continue
+            
             if prompt_id not in data:
                 continue
-
+            
             outputs = data[prompt_id].get("outputs", {})
             
             for node_id, node in outputs.items():
@@ -135,6 +139,7 @@ def run_gpu_job(endpoint, request):
                     )
 
                     img_resp.raise_for_status()
+                    print("Image received from GPU")
                     return to_data_url(img_resp.content)
 
         return None
@@ -180,7 +185,7 @@ LAST_WORKING_GPU = None
 
 # PERFORMANCE
 MAX_TOTAL_TIME = 45
-POLL_INTERVAL = 0.25
+POLL_INTERVAL = 0.5
 GPU_CONNECT_TIMEOUT = 15
 GPU_READ_TIMEOUT = 30
 
@@ -582,11 +587,21 @@ async def generate(request: GenerateRequest):
     # ---------------------------------
     
     endpoints = GPU_ENDPOINTS.copy()
-    random.shuffle(endpoints)
+    
+    # prioritera senaste fungerande GPU
+    if LAST_WORKING_GPU in endpoints:
+        endpoints.remove(LAST_WORKING_GPU)
+        endpoints.insert(0, LAST_WORKING_GPU)
+    
+    # slumpa resten (inte första)
+    if len(endpoints) > 1:
+        tail = endpoints[1:]
+        random.shuffle(tail)
+        endpoints = [endpoints[0]] + tail
     
     result_image = None
     
-    for endpoint in endpoints:
+    for endpoint in endpoints[:MAX_GPU_ATTEMPTS]:
     
         print("Trying GPU:", endpoint)
     
