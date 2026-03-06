@@ -175,14 +175,14 @@ def build_fingerprint(request: GenerateRequest) -> str:
 # =====================================================
 
 GPU_ENDPOINTS = [
+    "https://bzlfpe77lovz54-8188.proxy.runpod.net",
     "https://w3gfk2krqc76x4-8188.proxy.runpod.net",
     "https://n8ghjjv9kdbhez-8188.proxy.runpod.net",
-    "https://6yo3hior7k7lf8-8188.proxy.runpod.net",
-    "https://bzlfpe77lovz54-8188.proxy.runpod.net"
+    "https://6yo3hior7k7lf8-8188.proxy.runpod.net"    
 ]
 
 LAST_WORKING_GPU = None
-MAX_GPU_ATTEMPTS = 2
+MAX_GPU_ATTEMPTS = 4
 
 # PERFORMANCE
 MAX_TOTAL_TIME = 45
@@ -200,6 +200,7 @@ FALLBACK_IMAGES = [
 ]
 
 fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
+LAST_FALLBACK_IMAGE = None
 
 # =====================================================
 # UTIL
@@ -545,6 +546,7 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
 async def generate(request: GenerateRequest):
 
     global LAST_WORKING_GPU
+    global LAST_FALLBACK_IMAGE
 
     fingerprint = build_fingerprint(request)
     now = time.time()
@@ -587,6 +589,11 @@ async def generate(request: GenerateRequest):
     # GPU EXECUTION (ONE GPU PER REQUEST)
     # ---------------------------------
     
+    global GPU_INDEX
+    
+    result_image = None
+    
+    # skapa endpoint-lista
     endpoints = GPU_ENDPOINTS.copy()
     
     # prioritera senaste fungerande GPU
@@ -594,14 +601,15 @@ async def generate(request: GenerateRequest):
         endpoints.remove(LAST_WORKING_GPU)
         endpoints.insert(0, LAST_WORKING_GPU)
     
-    # slumpa resten (inte första)
-    if len(endpoints) > 1:
-        tail = endpoints[1:]
-        random.shuffle(tail)
-        endpoints = [endpoints[0]] + tail
+    # round-robin startposition
+    with LOCK:
+        start_index = GPU_INDEX % len(endpoints)
+        GPU_INDEX += 1
     
-    result_image = None
+    # rotera listan
+    endpoints = endpoints[start_index:] + endpoints[:start_index]
     
+    # försök några GPUs
     for endpoint in endpoints[:MAX_GPU_ATTEMPTS]:
     
         print("Trying GPU:", endpoint)
