@@ -233,48 +233,62 @@ GALAX_DESCRIPTIONS = {
 # =====================================================
 # MODE TUNING VARIABLES
 # =====================================================
+
 from typing import Optional
+import io
+import cv2
 from PIL import Image
 import numpy as np
 
-# 🔹 Hur mycket färg som krävs för COLOR_MODE
-COLOR_PIXEL_THRESHOLD = 0.08      # 8% färgpixlar
-SCRIBBLE_PIXEL_THRESHOLD = 0.02   # under 2% = EXTREME_SCRIBBLE
+# =====================================================
+# DRAWING ANALYSIS THRESHOLDS
+# =====================================================
 
-# ===============================
+SCRIBBLE_EDGE_THRESHOLD = 0.003
+LINE_EDGE_THRESHOLD = 0.02
+
+SCRIBBLE_PIXEL_THRESHOLD = 0.015
+COLOR_PIXEL_THRESHOLD = 0.06
+
+# =====================================================
 # EXTREME SCRIBBLE MODE
-# ===============================
-SCRIBBLE_DENOISE = 1.0
+# =====================================================
+
+SCRIBBLE_DENOISE = 0.75
 SCRIBBLE_CFG = 3.5
-SCRIBBLE_CONTROLNET_STRENGTH = 0.95
-SCRIBBLE_LORA_STRENGTH = 0.75
+SCRIBBLE_CONTROLNET_STRENGTH = 0.55
+SCRIBBLE_LORA_STRENGTH = 0.80
 
-# ===============================
+# =====================================================
 # LINE MODE
-# ===============================
-LINE_DENOISE = 0.90
-LINE_CFG = 3.0
-LINE_CONTROLNET_STRENGTH = 0.85
-LINE_LORA_STRENGTH = 0.65
+# =====================================================
 
-# ===============================
+LINE_DENOISE = 0.85
+LINE_CFG = 3.0
+LINE_CONTROLNET_STRENGTH = 0.60
+LINE_LORA_STRENGTH = 0.70
+
+# =====================================================
 # COLOR MODE
-# ===============================
+# =====================================================
+
 COLOR_DENOISE = 0.40
 COLOR_CFG = 2.5
-COLOR_CONTROLNET_STRENGTH = 0.75
-COLOR_LORA_STRENGTH = 0.55
+COLOR_CONTROLNET_STRENGTH = 0.65
+COLOR_LORA_STRENGTH = 0.60
 
-# ===============================
+# =====================================================
 # Sampler
-# ===============================
-SAMPLER_STEPS = 30
+# =====================================================
+
+SAMPLER_STEPS = 20
 SAMPLER_NAME = "dpmpp_2m_sde"
 SAMPLER_SCHEDULER = "karras"
 
-# ===============================
+# =====================================================
 # Models
-# ===============================
+# =====================================================
+
 CHECKPOINT_NAME = "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
 VAE_NAME = "sdxl_vae.safetensors"
 CONTROLNET_MODEL = "controlnet-depth-sdxl-1.0.safetensors"
@@ -282,53 +296,105 @@ LORA_NAME = "realcartoon3d_v17.safetensors"
 
 
 # =====================================================
-# COLOUR DETECTION
+# DRAWING ANALYSIS (REPLACES SIMPLE PIXEL RATIO)
 # =====================================================
 
-import io
-from PIL import Image
-import numpy as np
-
-def detect_color_ratio_from_base64(image_b64):
+def analyze_drawing(image_b64):
 
     image_bytes = base64.b64decode(image_b64.split(",")[-1])
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    arr = np.array(img)
+    img_np = np.array(img)
+
+    h, w, _ = img_np.shape
+    total_pixels = h * w
+
+    # -----------------------------
+    # pixel density
+    # -----------------------------
 
     non_black = np.sum(
-        (arr[:,:,0] > 20) |
-        (arr[:,:,1] > 20) |
-        (arr[:,:,2] > 20)
+        (img_np[:,:,0] > 20) |
+        (img_np[:,:,1] > 20) |
+        (img_np[:,:,2] > 20)
     )
 
-    total = arr.shape[0] * arr.shape[1]
+    pixel_ratio = non_black / total_pixels
 
-    return non_black / total
+    # -----------------------------
+    # edge density
+    # -----------------------------
+
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+
+    edges = cv2.Canny(gray, 50, 150)
+
+    edge_pixels = np.sum(edges > 0)
+
+    edge_ratio = edge_pixels / total_pixels
+
+    # -----------------------------
+    # coverage area
+    # -----------------------------
+
+    coords = np.column_stack(np.where(edges > 0))
+
+    if len(coords) > 0:
+        y0, x0 = coords.min(axis=0)
+        y1, x1 = coords.max(axis=0)
+
+        box_area = (y1 - y0) * (x1 - x0)
+
+        coverage = box_area / total_pixels
+    else:
+        coverage = 0
+
+    return {
+        "pixel_ratio": pixel_ratio,
+        "edge_ratio": edge_ratio,
+        "coverage": coverage
+    }
+
+
+# =====================================================
+# MODE DETECTION
+# =====================================================
+
+def detect_mode(metrics):
+
+    pixel_ratio = metrics["pixel_ratio"]
+    edge_ratio = metrics["edge_ratio"]
+    coverage = metrics["coverage"]
+
+    if edge_ratio < SCRIBBLE_EDGE_THRESHOLD and pixel_ratio < SCRIBBLE_PIXEL_THRESHOLD:
+        return "EXTREME_SCRIBBLE"
+
+    if pixel_ratio > COLOR_PIXEL_THRESHOLD and coverage > 0.2:
+        return "COLOR"
+
+    return "LINE"
 
 
 # =====================================================
 # WORKFLOW BUILDER
 # =====================================================
 
-def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, color_ratio: float):
+def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metrics: dict):
 
     seed = seed or random.randint(1, 999999999)
 
-    # -------------------------------------------------
-    # Mode detection
-    # -------------------------------------------------
+    mode = detect_mode(metrics)
 
-    if color_ratio < SCRIBBLE_PIXEL_THRESHOLD:
-        mode = "EXTREME_SCRIBBLE"
+    if mode == "EXTREME_SCRIBBLE":
+
         denoise = SCRIBBLE_DENOISE
         cfg = SCRIBBLE_CFG
         control_strength = SCRIBBLE_CONTROLNET_STRENGTH
         lora_strength = SCRIBBLE_LORA_STRENGTH
         latent_source = ["11", 0]
 
-    elif color_ratio < COLOR_PIXEL_THRESHOLD:
-        mode = "LINE"
+    elif mode == "LINE":
+
         denoise = LINE_DENOISE
         cfg = LINE_CFG
         control_strength = LINE_CONTROLNET_STRENGTH
@@ -336,33 +402,33 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
         latent_source = ["11", 0]
 
     else:
-        mode = "COLOR"
+
         denoise = COLOR_DENOISE
         cfg = COLOR_CFG
         control_strength = COLOR_CONTROLNET_STRENGTH
         lora_strength = COLOR_LORA_STRENGTH
         latent_source = ["8", 0]
 
-    print(f"MODE: {mode} | color_ratio={color_ratio:.3f}")
+    print(f"MODE: {mode} | metrics={metrics}")
 
     # -------------------------------------------------
     # Prompts
     # -------------------------------------------------
 
     positive_text = (
-        "High quality stylized 3D animated cartoon creature. "
-        "Interpret the drawing as contour guide only. "
-        "Build a thick solid rounded 3D character body inside the lines. "
-        "Convert neon lines into soft glowing edges on a full volumetric character. "
-        "Strong depth, soft shadows, cinematic rim light. "
-        "Keep overall silhouette and pose from the drawing. "
-        "Preserve main color idea from the lines. "
-        "Clearly non-human fantasy creature."
+        "High quality stylized 3D cartoon creature. "
+        "Use the drawing only as loose inspiration. "
+        "Create a cute fantasy character with head, body, arms and legs. "
+        "Pixar style character design. "
+        "Soft volumetric lighting and shading. "
+        "Large expressive eyes. "
+        "Rounded shapes and soft materials. "
+        "Magical fantasy creature similar to GALAX characters."
     )
 
     negative_text = (
-        "realistic human, photorealistic, horror, glitch, distorted body, "
-        "thin line art, flat drawing, 2D sketch, wireframe, transparent body"
+        "realistic human, horror, distorted body, thin sketch lines, "
+        "wireframe, flat drawing, transparent body"
     )
 
     # -------------------------------------------------
@@ -371,7 +437,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
 
     return {
 
-        # Checkpoint
         "1": {
             "class_type": "CheckpointLoaderSimple",
             "inputs": {
@@ -379,7 +444,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # VAE
         "2": {
             "class_type": "VAELoader",
             "inputs": {
@@ -387,7 +451,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Positive
         "3": {
             "class_type": "CLIPTextEncode",
             "inputs": {
@@ -396,7 +459,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Negative
         "4": {
             "class_type": "CLIPTextEncode",
             "inputs": {
@@ -405,7 +467,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Load drawing
         "7": {
             "class_type": "LoadImage",
             "inputs": {
@@ -413,7 +474,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # VAE Encode (for COLOR mode)
         "8": {
             "class_type": "VAEEncode",
             "inputs": {
@@ -422,7 +482,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # ControlNet
         "6": {
             "class_type": "ControlNetLoader",
             "inputs": {
@@ -442,7 +501,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # LoRA
         "10": {
             "class_type": "LoraLoader",
             "inputs": {
@@ -454,7 +512,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Empty latent (for LINE + SCRIBBLE)
         "11": {
             "class_type": "EmptyLatentImage",
             "inputs": {
@@ -464,7 +521,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Sampler
         "12": {
             "class_type": "KSampler",
             "inputs": {
@@ -481,7 +537,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Decode
         "13": {
             "class_type": "VAEDecode",
             "inputs": {
@@ -490,7 +545,6 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, colo
             }
         },
 
-        # Save
         "14": {
             "class_type": "SaveImage",
             "inputs": {
