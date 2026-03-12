@@ -331,23 +331,37 @@ def build_character_style(metrics):
     # BODY SIZE
 
     if coverage < 0.02:
-        body = "tiny skinny creature"
+        body = "tiny creature"
     elif coverage < 0.06:
-        body = "small creature"
+        body = random.choice([
+            "small creature",
+            "thin creature",
+            "little animal"
+        ])
     elif coverage < 0.15:
-        body = "medium creature"
+        body = random.choice([
+            "medium creature",
+            "long creature",
+            "round creature",
+            "square creature"
+        ])
     else:
-        body = "large round fluffy creature"
+        body = random.choice([
+            "large creature",
+            "big fluffy creature",
+            "large animal creature",
+            "big soft monster"
+        ])
 
-    # COLOR STYLE
+
 
     if colorfulness < 15:
-        colors = "soft pastel colors"
+        colors = "very colorful rainbow fantasy colors"
     elif colorfulness < 40:
         colors = "bright cartoon colors"
     else:
-        colors = "very colorful rainbow fantasy colors"
-
+        colors = "colors from the drawing"
+    
     # PERSONALITY
 
     if brightness < 60:
@@ -429,10 +443,11 @@ def build_workflow(style_key: str, seed: Optional[int], uploaded_name: str, metr
 
     Creature features: {features}
 
-    Pixar style character.
-    Large expressive eyes.
-    Rounded shapes.
-    Soft materials.
+    Cute 3D cartoon creature based on the drawing.
+    Follow the drawing shape.
+    Use the same colors.
+    Do not invent new colors.
+    Soft 3D cartoon style.
 
     Magical creature from the GALAX universe.
 
