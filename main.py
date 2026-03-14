@@ -234,7 +234,7 @@ GALAX_DESCRIPTIONS = {
     "kramis": "Large soft creature with big body mass.",
     "plupp": "Small magical creature with gentle glow.",
     "snurroga": "Playful fantasy creature with expressive features.",
-    "sticky": "Agile creature with dynamic posture.",
+    "sticky": "Agile thin creature with dynamic posture.",
     "wille": "Tiny happy creature with small body and large head."
 }
 
@@ -356,11 +356,11 @@ def build_character_style(metrics):
 
 
     if colorfulness < 15:
-        colors = "very colorful rainbow fantasy colors"
+        colors = "colors from the drawing."
     elif colorfulness < 40:
         colors = "bright cartoon colors"
     else:
-        colors = "colors from the drawing"
+        colors = "very colorful rainbow fantasy colors."
     
     # PERSONALITY
 
