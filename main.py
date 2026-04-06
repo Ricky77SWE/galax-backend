@@ -176,10 +176,7 @@ def build_fingerprint(request: GenerateRequest) -> str:
 # =====================================================
 
 GPU_ENDPOINTS = [
-    "https://bzlfpe77lovz54-8188.proxy.runpod.net",
-    "https://w3gfk2krqc76x4-8188.proxy.runpod.net",
-    "https://n8ghjjv9kdbhez-8188.proxy.runpod.net",
-    "https://6yo3hior7k7lf8-8188.proxy.runpod.net"    
+    "https://bzlfpe77lovz54-8188.proxy.runpod.net"   
 ]
 
 LAST_WORKING_GPU = None
