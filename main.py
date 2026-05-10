@@ -193,8 +193,8 @@ GPU_READ_TIMEOUT = 20
 # =====================================================
 
 FALLBACK_IMAGES = [
-    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/05/galax_000{i:02d}_.png"
-    for i in range(01, 87)
+    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/05/gala{i:02d}_.png"
+    for i in range(x_00001, x_00087)
 ]
 
 fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
