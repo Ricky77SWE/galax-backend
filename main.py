@@ -193,8 +193,8 @@ GPU_READ_TIMEOUT = 20
 # =====================================================
 
 FALLBACK_IMAGES = [
-    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/02/hero_{i:02d}.png"
-    for i in range(1, 15)
+    f"https://www-static.wemmstudios.se/wp-content/uploads/2026/05/galax_000{i:02d}_.png"
+    for i in range(01, 87)
 ]
 
 fallback_cycle = itertools.cycle(FALLBACK_IMAGES)
@@ -393,10 +393,10 @@ def generate_creature_features():
     ])
 
     tail = random.choice([
-        "short tail",
-        "long fluffy tail",
-        "tiny tail",
-        "no tail"
+        "reminds of a bear or cat with short tail",
+        "reminds of a bunny or parot with long fluffy tail",
+        "reminds of a squirrel or chipmunk with tiny tail",
+        "reminds of a dog or panda with thick short tail"
     ])
 
     texture = random.choice([
